@@ -2537,7 +2537,8 @@ async function loadAll() {
     // 完整訂單清單（含已隱藏）給歷史頁用
     state._allOrders = data.orders || [];
     // 看板用：過濾掉已隱藏
-    state.orders = state._allOrders.filter(o => !o.hidden);
+   const localHidden = getLocalHidden();
+state.orders = state._allOrders.filter(o => !localHidden.has(o.id));
     state.makeLogs = data.makeLogs || [];
     state.washLogs = data.washLogs || [];
 const merge = (remote, local) => [...new Set([...(remote || []), ...(local || [])])];
@@ -2722,11 +2723,14 @@ function renderHistory() {
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       if (logs.length) doneDate = fmtDate(logs[0].date);
     }
-    let status = '進行中', statusKey = 'is-ongoing';
-    if (o.hidden) { status = '已隱藏'; statusKey = 'is-hidden'; }
+    const localHidden = getLocalHidden();
+    const isLocalHidden = localHidden.has(o.id);
+let status = '進行中', statusKey = 'is-ongoing';
+if (isLocalHidden) { status = '已隱藏'; statusKey = 'is-hidden'; }
     else if (isDone) { status = '已完成'; statusKey = 'is-done'; }
     else if (o.urgent) { status = '急單'; statusKey = 'is-urgent'; }
-    return { o, made, washed, isDone, doneDate, status, statusKey };
+    return { o, made, washed, isDone, doneDate, status, statusKey, isLocalHidden };
+    
   });
 
   // ===== 表格版（桌面） =====
@@ -2752,14 +2756,22 @@ function renderHistory() {
         <td class="num">${made}</td>
         <td class="num">${washed}</td>
         <td>${doneDate || '-'}</td>
-        <td class="status">${status}</td>
+        <td class="status">
+  ${status}
+  ${isLocalHidden ? `<button onclick="restoreOrder('${o.id}')"
+    style="margin-left:8px;font-size:11px;padding:2px 8px;
+           background:transparent;border:1px solid var(--teal-1);
+           color:var(--teal-2);border-radius:3px;cursor:pointer;">
+    恢復
+  </button>` : ''}
+</td>
       </tr>
     `;
   }).join('');
 
   // ===== 卡片版（手機） =====
   if (cardsWrap) {
-    cardsWrap.innerHTML = enriched.map(({ o, made, washed, doneDate, status, statusKey }) => {
+    cardsWrap.innerHTML = enriched.map(({ o, made, washed, doneDate, status, statusKey, isLocalHidden }) => {
       const selected = state._selectedHistoryIds.has(o.id);
       const checked = selected ? 'checked' : '';
       const colorBit = o.color
@@ -2774,7 +2786,13 @@ function renderHistory() {
             <div class="hrow">
               <span class="h-item-name">${escapeHtml(o.item || '-')}</span>
               ${o.style ? `<span class="h-style">${escapeHtml(o.style)}</span>` : ''}
-              <span class="h-status ${statusKey}">${status}</span>
+             <span class="h-status ${statusKey}">${status}</span>
+${isLocalHidden ? `<button onclick="restoreOrder('${o.id}')"
+  style="font-size:11px;padding:2px 8px;background:transparent;
+         border:1px solid var(--teal-1);color:var(--teal-2);
+         border-radius:3px;cursor:pointer;">
+  恢復
+</button>` : ''}
             </div>
             <div class="h-meta">
               <div><span class="label">下單</span>${fmtDate(o.orderDate)}　${o.vendor ? `<span class="label">　廠商</span>${escapeHtml(o.vendor)}` : ''}</div>
@@ -3346,47 +3364,46 @@ async function submitProgress() {
   }
 }
 
-async function hideOrderFromCard(id) {
-  if (!id) return;
+function hideOrderFromCard(id) {
   const order = state.orders.find(o => o.id === id);
   if (!order) return;
-  // 簡單描述方便確認
   const desc = [order.vendor, order.item, order.style, order.color, order.size]
     .filter(Boolean).join('・');
-  if (!confirm(`確定要隱藏這筆訂單？\n${desc || ''}\n（看板上會立刻消失，試算表上的紀錄仍會保留以備查；可在「歷史紀錄」永久刪除）`)) return;
-  try {
-    await api('deleteOrder', { id });
-    toast('已從看板隱藏');
-    await loadAll();
-  } catch (err) {
-    toast('隱藏失敗：' + err.message, 'error');
-  }
+  if (!confirm(`確定要隱藏這筆訂單？\n${desc || ''}\n（只在此裝置隱藏，可在「歷史紀錄」恢復）`)) return;
+  
+  const hidden = getLocalHidden();
+  hidden.add(id);
+  saveLocalHidden(hidden);
+  toast('已隱藏（只在此裝置）');
+  renderBoard();
+  renderHistory();
 }
 
-async function deleteCurrentOrder() {
-  if (!state.currentOrderId) return;
-  const btn = document.getElementById('modal-delete-btn');
-  if (btn && btn.disabled) return;
-  if (!confirm('確定要隱藏這筆訂單？\n（看板上會立刻消失，試算表上的紀錄仍會保留以備查；可在「歷史紀錄」永久刪除）')) return;
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = '隱藏中...';
-  }
+
+
+const LOCAL_HIDDEN_KEY = 'niyan_hidden_ids';
+
+function getLocalHidden() {
   try {
-    await api('deleteOrder', { id: state.currentOrderId });
-    toast('已從看板隱藏');
-    closeModal();
-    await loadAll();
-  } catch (err) {
-    toast('隱藏失敗：' + err.message, 'error');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = '隱藏';
-    }
-  }
+    const raw = localStorage.getItem(LOCAL_HIDDEN_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch { return new Set(); }
 }
 
+function saveLocalHidden(set) {
+  try {
+    localStorage.setItem(LOCAL_HIDDEN_KEY, JSON.stringify([...set]));
+  } catch {}
+}
+
+function restoreOrder(id) {
+  const hidden = getLocalHidden();
+  hidden.delete(id);
+  saveLocalHidden(hidden);
+  toast('已恢復顯示');
+  renderBoard();
+  renderHistory();
+}
 /* ================================================
    設定頁函式
 ================================================ */
@@ -3558,9 +3575,10 @@ function toggleGasCode() {
 function clearLocalData() {
   if (!confirm('確定清除本機儲存的設定？\n（Apps Script 網址、試算表網址都會被清除，試算表上的資料不受影響）')) return;
   try {
-    localStorage.removeItem('niyan_api_url');
-    localStorage.removeItem('niyan_sheet_url');
-    localStorage.removeItem('niyan_data'); // 舊版殘留
+localStorage.removeItem('niyan_api_url');
+localStorage.removeItem('niyan_sheet_url');
+localStorage.removeItem('niyan_data'); // 舊版殘留
+localStorage.removeItem('niyan_hidden_ids'); 
     toast('已清除');
     setTimeout(() => location.reload(), 600);
   } catch (err) {
@@ -3580,7 +3598,7 @@ function setPage(page) {
   document.getElementById('nav-board').classList.toggle('active', page === 'board');
   document.getElementById('nav-input').classList.toggle('active', page === 'input');
   document.getElementById('nav-history').classList.toggle('active', page === 'history');
-  document.querySelector('.gear-btn')?.classList.toggle('active', page === 'settings');
+  document.querySelectorAll('.gear-btn')[1]?.classList.toggle('active', page === 'settings');
   location.hash = page;
   if (page === 'settings') renderSettingsPage();
   if (page === 'history') renderHistory();

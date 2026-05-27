@@ -1914,8 +1914,9 @@
 
     <div class="log-list" id="log-list"></div>
 
-    <div class="actions" style="grid-column: 1 / -1;">
+ <div class="actions" style="grid-column: 1 / -1;">
       <button type="button" class="btn btn-secondary" onclick="closeModal()">關閉</button>
+      <button type="button" class="btn btn-danger" id="modal-delete" onclick="deleteOrderFromModal()">刪除訂單</button>
       <button type="button" class="btn btn-primary" id="modal-submit" onclick="submitProgress()">記錄</button>
     </div>
   </div>
@@ -3328,12 +3329,11 @@ async function submitProgress() {
   if (!orderId) return;
 
   const btn = document.getElementById('modal-submit');
-  if (btn.disabled) return;  // 防雙擊
+  if (btn.disabled) return;
 
   const date = document.getElementById('m-date').value;
   const quantity = Number(document.getElementById('m-quantity').value);
 
-  // 從 chip + 「其他」輸入欄拿師傅名
   let person = state.selectedPerson;
   if (person === '其他') {
     person = document.getElementById('m-person-other').value.trim();
@@ -3362,6 +3362,30 @@ async function submitProgress() {
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
+  }
+}
+
+async function deleteOrderFromModal() {
+  const orderId = state.currentOrderId;
+  if (!orderId) return;
+  const o = state.orders.find(x => x.id === orderId);
+  if (!o) return;
+
+  const label = [o.vendor, o.item, o.style, o.color, o.size].filter(Boolean).join(' · ');
+  if (!confirm(`確定要刪除這筆訂單嗎？\n\n${label}　${o.quantity} 件\n\n（訂單會從看板隱藏，資料保留於試算表歷史紀錄）`)) return;
+
+  const btn = document.getElementById('modal-delete');
+  if (btn) { btn.disabled = true; btn.textContent = '刪除中...'; }
+
+  try {
+    await api('deleteOrder', { id: orderId });
+    closeModal();
+    toast('訂單已刪除');
+    await loadAll();
+  } catch (err) {
+    toast('刪除失敗：' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '刪除訂單'; }
   }
 }
 

@@ -3366,16 +3366,10 @@ async function submitProgress() {
 }
 
 function hideOrderFromCard(id) {
-  const order = state.orders.find(o => o.id === id);
-  if (!order) return;
-  const desc = [order.vendor, order.item, order.style, order.color, order.size]
-    .filter(Boolean).join('・');
-  if (!confirm(`確定要隱藏這筆訂單？\n${desc || ''}\n（只在此裝置隱藏，可在「歷史紀錄」恢復）`)) return;
-  
   const hidden = getLocalHidden();
   hidden.add(id);
   saveLocalHidden(hidden);
-  toast('已隱藏（只在此裝置）');
+  toast('已隱藏');
   renderBoard();
   renderHistory();
 }

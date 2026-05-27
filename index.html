@@ -3371,10 +3371,17 @@ function hideOrderFromCard(id) {
   saveLocalHidden(hidden);
   toast('已隱藏');
   renderBoard();
-  renderHistory();
 }
-
-
+function restoreOrder(id) {
+  const hidden = getLocalHidden();
+  hidden.delete(id);
+  saveLocalHidden(hidden);
+  toast('已恢復顯示');
+  renderHistory();
+  if (document.body.classList.contains('page-board-active')) {
+    renderBoard();
+  }
+}
 
 const LOCAL_HIDDEN_KEY = 'niyan_hidden_ids';
 

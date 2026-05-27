@@ -2597,12 +2597,23 @@ function sortActive_(active) {
 function renderBoard() {
   const wrap = document.getElementById('board-cards');
 
+  // 分成未完成 + 已完成
   const active = state.orders.filter(o => !isDone_(o));
   const done = state.orders.filter(o => isDone_(o));
+
+  // 已完成永遠用原規則
   done.sort(defaultSortCompare_);
+
+  // 未完成套用手動排序
   const activeFinal = sortActive_(active);
+
   const list = [...activeFinal, ...done];
 
+  let totalQty = 0;
+  list.forEach(o => totalQty += Number(o.quantity || 0));
+  document.getElementById('board-count').textContent = `${list.length} ORDER · ${totalQty} PCS`;
+
+  // 渲染時附帶位置資訊（給箭頭判斷是否能上/下移）
   wrap.innerHTML = list.map(o => {
     const isActive = !isDone_(o);
     const activeIdx = activeFinal.indexOf(o);
@@ -2610,40 +2621,6 @@ function renderBoard() {
     const canDown = isActive && activeIdx < activeFinal.length - 1;
     return renderCard(o, { canUp, canDown });
   }).join('') || '<div class="empty">// 尚無訂單</div>';
-
-  updateBoardCount();
-  refreshHiddenToggle();
-}
-
-function updateBoardCount() {
-  const list = state.orders;
-  let totalQty = 0;
-  list.forEach(o => totalQty += Number(o.quantity || 0));
-  document.getElementById('board-count').textContent =
-    `${list.length} ORDER · ${totalQty} PCS`;
-}
-
-function refreshHiddenToggle() {
-  let toggle = document.getElementById('board-hidden-toggle');
-  if (!toggle) {
-    toggle = document.createElement('div');
-    toggle.id = 'board-hidden-toggle';
-    toggle.style.cssText =
-      'text-align:center;margin-top:18px;font-size:12px;color:var(--text-mute);';
-    document.getElementById('board-cards').after(toggle);
-  }
-  const hiddenCount = getLocalHidden().size;
-  if (hiddenCount > 0) {
-    toggle.innerHTML = `<button onclick="showAllHidden()" style="background:none;border:1px dashed var(--line-strong);color:var(--text-dim);padding:6px 16px;border-radius:14px;cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:1px;">顯示已隱藏的 ${hiddenCount} 個</button>`;
-  } else {
-    toggle.innerHTML = '';
-  }
-}
-
-function showAllHidden() {
-  saveLocalHidden(new Set());  // 清空隱藏清單
-  toast('已恢復所有隱藏訂單');
-  loadAll();  // 重新拉資料(因為已隱藏的訂單不在 state.orders 裡)
 }
 
 // 上/下移：交換兩張卡的位置，並寫回後端
@@ -3392,24 +3369,12 @@ function hideOrderFromCard(id) {
   const hidden = getLocalHidden();
   hidden.add(id);
   saveLocalHidden(hidden);
-
-  // 從 state 同步移除(避免下次 loadAll 又出現)
-  state.orders = state.orders.filter(o => o.id !== id);
-
-  // 直接從 DOM 移除這張卡,不重繪整個看板
-  const card = document.querySelector(`.card[onclick*="'${id}'"]`);
-  if (card) {
-    card.style.transition = 'opacity 0.15s, transform 0.15s';
-    card.style.opacity = '0';
-    card.style.transform = 'translateX(20px)';
-    setTimeout(() => card.remove(), 150);
-  }
-
-  // 更新計數 + 隱藏切換鈕
-  updateBoardCount();
-  refreshHiddenToggle();
   toast('已隱藏');
+  renderBoard();
+  renderHistory();
 }
+
+
 
 const LOCAL_HIDDEN_KEY = 'niyan_hidden_ids';
 
@@ -3431,10 +3396,8 @@ function restoreOrder(id) {
   hidden.delete(id);
   saveLocalHidden(hidden);
   toast('已恢復顯示');
+  renderBoard();
   renderHistory();
-  if (document.body.classList.contains('page-board-active')) {
-    renderBoard();
-  }
 }
 /* ================================================
    設定頁函式

@@ -2734,7 +2734,8 @@ if (isLocalHidden) { status = '已隱藏'; statusKey = 'is-hidden'; }
   });
 
   // ===== 表格版（桌面） =====
-  tbody.innerHTML = enriched.map(({ o, made, washed, isDone, doneDate, status, statusKey }) => {
+  tbody.innerHTML =// 修正後
+enriched.map(({ o, made, washed, isDone, doneDate, status, statusKey, isLocalHidden }) => {
     const classes = [
       statusKey,
       state._selectedHistoryIds.has(o.id) ? 'selected' : ''

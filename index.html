@@ -1910,7 +1910,7 @@
     <div class="log-list" id="log-list"></div>
 
 <div class="actions" style="grid-column: 1 / -1;">
-      <button type="button" class="btn btn-danger" id="modal-delete" onclick="deleteOrderFromModal()" style="margin-right: auto;">刪除訂單</button>
+     <button type="button" class="btn btn-secondary" id="modal-done" onclick="toggleOrderDone()" style="margin-right: auto;">標記完成</button>
       <button type="button" class="btn btn-secondary" onclick="closeModal()">關閉</button>
       <button type="button" class="btn btn-primary" id="modal-submit" onclick="submitProgress()">記錄</button>
     </div>
@@ -2658,15 +2658,15 @@ async function moveOrder(id, direction) {
 }
 
 function isDone_(o) {
-  // 「已完成」= 清洗數 ≥ 訂單總數（流程終點是清洗）
-  const washed = state.washLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.quantity || 0), 0);
-  return washed >= o.quantity && o.quantity > 0;
+  // 「已完成」改為手動標記（存於試算表「已完成」欄）
+  return o.done === true;
 }
 
 // 歷史紀錄：顯示所有訂單（含已隱藏），用試算表上的完整資料
 function renderHistory() {
   const tbody = document.getElementById('history-tbody');
   const cardsWrap = document.getElementById('history-cards');
+  
   if (!tbody) return;
 
   // 確保 selection set 存在
@@ -2709,8 +2709,8 @@ function renderHistory() {
   const enriched = filtered.map(o => {
     const made = state.makeLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.quantity || 0), 0);
     const washed = state.washLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.quantity || 0), 0);
-    // 已完成 = 清洗數 ≥ 訂單總數
-    const isDone = washed >= o.quantity && o.quantity > 0;
+    // 已完成 = 手動標記
+    const isDone = o.done === true;
     let doneDate = '';
     if (isDone) {
       // 完成日期取最後一筆「清洗」紀錄
@@ -2889,7 +2889,7 @@ async function purgeSelectedOrders() {
 
 function renderCard(o, sortInfo) {
   const { made, washed } = getOrderProgress(o.id);
-  const done = washed >= o.quantity && o.quantity > 0;
+  const done = o.done === true;
   const sizeText = o.size;
   const dueText = o.dueDate === '無' || !o.dueDate ? '無交期' : fmtDate(o.dueDate);
   const canUp = sortInfo?.canUp;
@@ -3247,6 +3247,7 @@ function openModal(orderId) {
   document.getElementById('m-person-other').value = '';
   document.getElementById('m-person-other').style.display = 'none';
   document.getElementById('m-quantity').value = '';
+  updateModalDoneBtn();
   document.getElementById('modal').classList.add('show');
 }
 
@@ -3360,30 +3361,53 @@ async function submitProgress() {
   }
 }
 
-async function deleteOrderFromModal() {
+// 手動切換「已完成 / 取消完成」（存試算表，多裝置同步）
+async function toggleOrderDone() {
   const orderId = state.currentOrderId;
   if (!orderId) return;
   const o = state.orders.find(x => x.id === orderId);
   if (!o) return;
 
-  const label = [o.vendor, o.item, o.style, o.color, o.size].filter(Boolean).join(' · ');
-  if (!confirm(`確定要刪除這筆訂單嗎？\n\n${label}　${o.quantity} 件\n\n（訂單會從看板隱藏，資料保留於試算表歷史紀錄）`)) return;
+  const newDone = !o.done;
+  const btn = document.getElementById('modal-done');
+  if (btn && btn.disabled) return;
+  if (btn) { btn.disabled = true; btn.textContent = '處理中...'; }
 
-  const btn = document.getElementById('modal-delete');
-  if (btn) { btn.disabled = true; btn.textContent = '刪除中...'; }
+  // 樂觀更新（同步更新 _allOrders 讓歷史頁也即時反映）
+  o.done = newDone;
+  const ao = (state._allOrders || []).find(x => x.id === orderId);
+  if (ao) ao.done = newDone;
 
   try {
-    await api('deleteOrder', { id: orderId });
-    closeModal();
-    toast('訂單已刪除');
-    await loadAll();
+    await api('setOrderDone', { id: orderId, done: newDone });
+    toast(newDone ? '已標記完成' : '已取消完成');
+    renderBoard();
+    renderHistory();
   } catch (err) {
-    toast('刪除失敗：' + err.message, 'error');
+    o.done = !newDone;
+    if (ao) ao.done = !newDone;
+    toast('更新失敗：' + err.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '刪除訂單'; }
+    if (btn) btn.disabled = false;
+    updateModalDoneBtn();
   }
 }
 
+// 依目前狀態更新 Modal 完成鈕的文字與顏色
+function updateModalDoneBtn() {
+  const btn = document.getElementById('modal-done');
+  const o = state.orders.find(x => x.id === state.currentOrderId);
+  if (!btn || !o) return;
+  if (o.done) {
+    btn.textContent = '取消完成';
+    btn.style.borderColor = 'var(--text-mute)';
+    btn.style.color = 'var(--text-dim)';
+  } else {
+    btn.textContent = '標記完成';
+    btn.style.borderColor = 'var(--done)';
+    btn.style.color = 'var(--done)';
+  }
+}
 function hideOrderFromCard(id) {
   const hidden = getLocalHidden();
   hidden.add(id);

@@ -1125,11 +1125,18 @@
     .card-act-btn.hide-btn { font-size: 12px; }
     .card-actions { right: 6px; gap: 3px; }
     .card-qty-block {
-      flex-direction: row;
-      justify-content: space-between;
-      align-items: baseline;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
       padding-top: 12px;
       border-top: 1px dashed var(--line);
+    }
+    /* 標籤移到數字上方，給它整行空間就不會擠 */
+    .card-qty-block .qty-block-legend {
+      order: -1;
+      width: 100%;
+      margin-top: 0;
+      flex-wrap: wrap;
     }
     .card.urgent .card-qty-block { border-top-color: rgba(255, 45, 85, 0.3); }
     .qty-block-main { font-size: 28px; }

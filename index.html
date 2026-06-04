@@ -2255,9 +2255,8 @@ function hydrateFromCache() {
     const raw = localStorage.getItem(DATA_CACHE_KEY);
     if (!raw) return false;
     const c = JSON.parse(raw);
-    state._allOrders   = c.orders || [];
-    const localHidden  = getLocalHidden();
-    state.orders       = state._allOrders.filter(o => !localHidden.has(o.id));
+    state._allOrders = c.orders || [];
+    state.orders = state._allOrders.filter(o => !o.hidden);
     state.makeLogs     = c.makeLogs  || [];
     state.washLogs     = c.washLogs  || [];
     state.grindLogs    = c.grindLogs || [];
@@ -2276,11 +2275,8 @@ function hydrateFromCache() {
 async function loadAll() {
   try {
     const data = await api('getAll');
-    // 完整訂單清單（含已隱藏）給歷史頁用
-    state._allOrders = data.orders || [];
-    // 看板用：過濾掉已隱藏
-   const localHidden = getLocalHidden();
-state.orders = state._allOrders.filter(o => !localHidden.has(o.id));
+    state._allOrders = c.orders || [];
+    state.orders     = state._allOrders.filter(o => !o.hidden);
     state.makeLogs = data.makeLogs || [];
     state.washLogs = data.washLogs || [];
     state.grindLogs = data.grindLogs || [];
@@ -2467,8 +2463,7 @@ function renderHistory() {
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       if (logs.length) doneDate = fmtDate(logs[0].date);
     }
-    const localHidden = getLocalHidden();
-    const isLocalHidden = localHidden.has(o.id);
+    const isLocalHidden = o.hidden === true;
 let status = '進行中', statusKey = 'is-ongoing';
 if (isLocalHidden) { status = '已隱藏'; statusKey = 'is-hidden'; }
     else if (isDone) { status = '已完成'; statusKey = 'is-done'; }
@@ -3225,21 +3220,37 @@ function updateModalDoneBtn() {
     btn.style.color = 'var(--done)';
   }
 }
-function hideOrderFromCard(id) {
-  const hidden = getLocalHidden();
-  hidden.add(id);
-  saveLocalHidden(hidden);
-  toast('已隱藏');
+async function hideOrderFromCard(id) {
+  const ao = (state._allOrders || []).find(x => x.id === id);
+  if (ao) ao.hidden = true;                                  // 樂觀更新
+  state.orders = (state._allOrders || []).filter(o => !o.hidden);
   renderBoard();
-}
-function restoreOrder(id) {
-  const hidden = getLocalHidden();
-  hidden.delete(id);
-  saveLocalHidden(hidden);
-  toast('已恢復顯示');
-  renderHistory();
-  if (document.body.classList.contains('page-board-active')) {
+  try {
+    await api('setOrderHidden', { id, hidden: true });
+    toast('已隱藏（已同步）');
+    renderHistory();
+  } catch (err) {
+    if (ao) ao.hidden = false;                               // 失敗還原
+    state.orders = (state._allOrders || []).filter(o => !o.hidden);
     renderBoard();
+    toast('隱藏失敗：' + err.message, 'error');
+  }
+}
+async function restoreOrder(id) {
+  const ao = (state._allOrders || []).find(x => x.id === id);
+  if (ao) ao.hidden = false;                                 // 樂觀更新
+  state.orders = (state._allOrders || []).filter(o => !o.hidden);
+  renderHistory();
+  renderBoard();
+  try {
+    await api('setOrderHidden', { id, hidden: false });
+    toast('已恢復顯示（已同步）');
+  } catch (err) {
+    if (ao) ao.hidden = true;
+    state.orders = (state._allOrders || []).filter(o => !o.hidden);
+    renderHistory();
+    renderBoard();
+    toast('恢復失敗：' + err.message, 'error');
   }
 }
 
@@ -3258,14 +3269,7 @@ function saveLocalHidden(set) {
   } catch {}
 }
 
-function restoreOrder(id) {
-  const hidden = getLocalHidden();
-  hidden.delete(id);
-  saveLocalHidden(hidden);
-  toast('已恢復顯示');
-  renderBoard();
-  renderHistory();
-}
+
 /* ================================================
    設定頁函式
 ================================================ */

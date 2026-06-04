@@ -2275,7 +2275,7 @@ function hydrateFromCache() {
 async function loadAll() {
   try {
     const data = await api('getAll');
-    state._allOrders = c.orders || [];
+    state._allOrders = data.orders || [];
     state.orders     = state._allOrders.filter(o => !o.hidden);
     state.makeLogs = data.makeLogs || [];
     state.washLogs = data.washLogs || [];

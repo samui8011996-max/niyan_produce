@@ -1194,7 +1194,6 @@
     .qty-block-main { font-size: 22px; letter-spacing: 0; }
     .qty-block-main .slash { margin: 0 3px; }
     .qty-block-legend { font-size: 9px; gap: 6px; }
-    .qty-append-btn { padding: 10px 16px !important; letter-spacing: 2px !important;
     .item-name { font-size: 18px; }
     .chip { font-size: 13px; padding: 7px 12px; }
     .chip-group.color-grid .chip {
@@ -3053,7 +3052,7 @@ async function submitAppendQty() {
   } catch (err) {
     toast('修改失敗：' + err.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '追加'; }}
+    if (btn) { btn.disabled = false; btn.textContent = '修改'; }
   }
 }
 function renderPersonChips() {

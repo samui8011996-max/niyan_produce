@@ -50,7 +50,8 @@
   }
   .qty-append-row { display: flex; gap: 10px; margin-bottom: 10px; }
   .qty-append-row input[type=number] {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;          /* 讓輸入框可被壓縮，按鈕才不會被擠出邊界 */
     background: var(--bg-1);
     border: 1px solid var(--line);
     color: var(--text);

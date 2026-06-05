@@ -2210,7 +2210,7 @@ function updateLastSync() {
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   const ss = String(d.getSeconds()).padStart(2, '0');
-  document.getElementById('last-sync').textContent = `// SYNC ${hh}:${mm}:${ss}`;
+  document.getElementById('last-sync').textContent = `// 更新 ${hh}:${mm}:${ss}`;
 }
 
 /* ================================================

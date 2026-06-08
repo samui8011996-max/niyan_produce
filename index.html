@@ -776,6 +776,38 @@
     box-shadow: 0 0 0 2px rgba(0, 212, 200, 0.15);
   }
   input[type=date] { color-scheme: dark; }
+  /* 下單時的初始進度區 */
+
+  .init-toggle {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+    transition: color 0.15s;
+  }
+  .init-toggle:hover { color: var(--teal-2); }
+  #init-toggle-icon { color: var(--teal-2); font-size: 11px; }
+  .init-progress-box {
+    background: var(--bg-0);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--teal-1);
+    border-radius: 4px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 8px;
+  }
+  .init-prog-item { display: flex; flex-direction: column; gap: 8px; }
+  .init-prog-item input[type=number] { width: 100%; min-width: 0; }
+  .init-prog-label {
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    font-weight: 700;
+  }
+  .init-progress-person { display: flex; flex-direction: column; gap: 8px; }
 
   .chip-group {
     display: flex; flex-wrap: wrap; gap: 8px;
@@ -1839,13 +1871,17 @@
       <div class="chip-group" id="size-chips"></div>
     </div>
 
-    <div class="field full">
+   <div class="field full">
       <label>廠商名稱</label>
-      <div class="chip-group" id="vendor-chips"></div>
+      <div class="item-select-row">
+        <select id="f-vendor" onchange="selectVendorFromDropdown(this.value)"></select>
+        <button type="button" class="chip add-new" onclick="addCustom('vendor')">+ 新增</button>
+        <button type="button" class="chip" onclick="deleteCurrentVendor()" title="刪除目前選的自訂廠商">🗑</button>
+      </div>
     </div>
 
     <div class="field full">
-      <label>數量 <span class="req">*</span></label>
+      <label>數量</label>
       <div class="qty-input-row">
         <input type="number" id="f-quantity" min="1" placeholder="輸入數量">
         <div class="qty-quickadd">
@@ -1859,7 +1895,63 @@
         </div>
       </div>
     </div>
+<div class="field full">
+      <label class="init-toggle" onclick="toggleInitProgress()">
+        <span id="init-toggle-icon">▸</span> 初始進度（選填）— 點開可下單同時記錄
+      </label>
+      <div class="init-progress-box" id="init-progress-box" style="display:none;">
 
+        <div class="init-prog-item">
+          <span class="init-prog-label" style="color:var(--teal-2)">製造</span>
+          <input type="number" id="f-init-make" min="0" placeholder="0">
+          <div class="qty-quickadd">
+            <button type="button" class="chip qty-add" data-init-target="f-init-make" data-init-add="1">+1</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-make" data-init-add="5">+5</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-make" data-init-add="10">+10</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-make" data-init-add="20">+20</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-make" data-init-add="50">+50</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-make" data-init-add="100">+100</button>
+            <button type="button" class="chip qty-clear" onclick="document.getElementById('f-init-make').value='';">清除</button>
+          </div>
+        </div>
+
+        <div class="init-prog-item">
+          <span class="init-prog-label" style="color:var(--ground)">研磨</span>
+          <input type="number" id="f-init-grind" min="0" placeholder="0">
+          <div class="qty-quickadd">
+            <button type="button" class="chip qty-add" data-init-target="f-init-grind" data-init-add="1">+1</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-grind" data-init-add="5">+5</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-grind" data-init-add="10">+10</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-grind" data-init-add="20">+20</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-grind" data-init-add="50">+50</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-grind" data-init-add="100">+100</button>
+            <button type="button" class="chip qty-clear" onclick="document.getElementById('f-init-grind').value='';">清除</button>
+          </div>
+        </div>
+
+        <div class="init-prog-item">
+          <span class="init-prog-label" style="color:var(--warn)">清洗</span>
+          <input type="number" id="f-init-wash" min="0" placeholder="0">
+          <div class="qty-quickadd">
+            <button type="button" class="chip qty-add" data-init-target="f-init-wash" data-init-add="1">+1</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-wash" data-init-add="5">+5</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-wash" data-init-add="10">+10</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-wash" data-init-add="20">+20</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-wash" data-init-add="50">+50</button>
+            <button type="button" class="chip qty-add" data-init-target="f-init-wash" data-init-add="100">+100</button>
+            <button type="button" class="chip qty-clear" onclick="document.getElementById('f-init-wash').value='';">清除</button>
+          </div>
+        </div>
+
+        <div class="init-progress-person">
+          <span class="init-prog-label">填寫人</span>
+          <div class="chip-group" id="init-person-chips"></div>
+          <input type="text" id="f-init-person-other" placeholder="其他人員姓名" style="display:none; margin-top:6px;">
+        </div>
+      </div>
+    </div>
+
+  
     <div class="field">
       <label>類別 <span class="req">*</span></label>
       <div class="chip-group">
@@ -2213,9 +2305,11 @@ const state = {
   selectedSize: '',
   isUrgent: false,
   // Modal
+  // Modal
   currentOrderId: null,
   modalTab: 'make',
   selectedPerson: '',
+  initPerson: '',
 };
 
 /* ================================================
@@ -2829,11 +2923,18 @@ function chipHtml(value, field, isCustom) {
 }
 
 function renderFormOptions() {
-  // 廠商
-  document.getElementById('vendor-chips').innerHTML =
-    DEFAULT_VENDORS.map(v => chipHtml(v, 'vendor', false)).join('') +
-    state.customVendors.map(v => chipHtml(v, 'vendor', true)).join('') +
-    `<button type="button" class="chip add-new" data-add="vendor">+ 新增</button>`;
+  // 廠商（下拉選單）
+  const vendorSel = document.getElementById('f-vendor');
+  if (vendorSel) {
+    const opts = ['<option value="">— 選擇廠商 —</option>']
+      .concat(DEFAULT_VENDORS.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`))
+      .concat(state.customVendors.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}（自訂）</option>`));
+    vendorSel.innerHTML = opts.join('');
+    vendorSel.value = state.selectedVendor || '';
+  }
+
+ // 初始進度的填寫人（按鈕）
+  renderInitPersonChips();
 
  // 品項（下拉選單）
   const itemSel = document.getElementById('f-item');
@@ -2903,11 +3004,23 @@ document.addEventListener('click', (e) => {
   const personChip = e.target.closest('.chip[data-person]');
   if (personChip) {
     selectPerson(personChip.dataset.person);
+    return;
   }
-  const appendQtyBtn = e.target.closest('.chip[data-append-qty]');
+  const initPersonChip = e.target.closest('.chip[data-init-person]');
+  if (initPersonChip) {
+    selectInitPerson(initPersonChip.dataset.initPerson);
+    return;
+  }
+ const appendQtyBtn = e.target.closest('.chip[data-append-qty]');
   if (appendQtyBtn) {
     const input = document.getElementById('m-append-qty');
     input.value = (Number(input.value) || 0) + Number(appendQtyBtn.dataset.appendQty);
+    return;
+  }
+  const initAddBtn = e.target.closest('.chip[data-init-add]');
+  if (initAddBtn) {
+    const input = document.getElementById(initAddBtn.dataset.initTarget);
+    if (input) input.value = (Number(input.value) || 0) + Number(initAddBtn.dataset.initAdd);
     return;
   }
 });
@@ -3039,8 +3152,18 @@ function resetForm() {
   document.getElementById('f-note').value = '';
   const itemSel = document.getElementById('f-item');
   if (itemSel) itemSel.value = '';
+  const vendorSel = document.getElementById('f-vendor');
+  if (vendorSel) vendorSel.value = '';
+  document.getElementById('f-init-make').value = '';
+  document.getElementById('f-init-grind').value = '';
+  document.getElementById('f-init-wash').value = '';
+  state.initPerson = '';
+  updateInitPersonChipActive();
+  const ipOther = document.getElementById('f-init-person-other');
+  if (ipOther) { ipOther.value = ''; ipOther.style.display = 'none'; }
   updateChipActive();
 }
+
 
 
 /* ====== 品項下拉選單 ====== */
@@ -3053,18 +3176,66 @@ function deleteCurrentItem() {
   if (!state.customItems.includes(v)) return toast('內建品項無法刪除', 'warn');
   deleteCustomOption('item', v);
 }
+/* ====== 廠商下拉選單 ====== */
+function selectVendorFromDropdown(value) {
+  state.selectedVendor = value || '';
+}
+function deleteCurrentVendor() {
+  const v = state.selectedVendor;
+  if (!v) return toast('請先在下拉選單選擇要刪除的廠商', 'error');
+  if (!state.customVendors.includes(v)) return toast('內建廠商無法刪除', 'warn');
+  deleteCustomOption('vendor', v);
+}
 
+/* ====== 初始進度填寫人（按鈕） ====== */
+function renderInitPersonChips() {
+  const wrap = document.getElementById('init-person-chips');
+  if (!wrap) return;
+  wrap.innerHTML = PERSONS.map(p =>
+    `<button type="button" class="chip" data-init-person="${escapeHtml(p)}">${escapeHtml(p)}</button>`
+  ).join('');
+  updateInitPersonChipActive();
+}
+function updateInitPersonChipActive() {
+  document.querySelectorAll('#init-person-chips .chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.initPerson === state.initPerson);
+  });
+}
+function selectInitPerson(name) {
+  state.initPerson = (state.initPerson === name) ? '' : name;   // 再按一次取消
+  const other = document.getElementById('f-init-person-other');
+  if (other) other.style.display = (state.initPerson === '其他') ? 'block' : 'none';
+  updateInitPersonChipActive();
+}
+
+function toggleInitProgress() {
+  const box = document.getElementById('init-progress-box');
+  const icon = document.getElementById('init-toggle-icon');
+  if (!box) return;
+  const open = box.style.display === 'none' || box.style.display === '';
+  box.style.display = open ? 'flex' : 'none';
+  if (icon) icon.textContent = open ? '▾' : '▸';
+}
 /* ====== 批次下單（一次多筆品項） ====== */
 function addToBatch(silent) {
   const orderDate = document.getElementById('f-orderDate').value;
   const dueDate = document.getElementById('due-none-chip').classList.contains('active')
     ? '無' : document.getElementById('f-dueDate').value;
-  const quantity = Number(document.getElementById('f-quantity').value);
+  const quantity = Number(document.getElementById('f-quantity').value) || 0;
   const note = document.getElementById('f-note').value.trim();
+
+  // 初始進度（選填）
+  const initMake  = Number(document.getElementById('f-init-make').value)  || 0;
+  const initGrind = Number(document.getElementById('f-init-grind').value) || 0;
+  const initWash  = Number(document.getElementById('f-init-wash').value)  || 0;
+  let initPerson = state.initPerson || '';
+  if (initPerson === '其他') initPerson = document.getElementById('f-init-person-other').value.trim();
 
   if (!state.selectedItem) { if (!silent) toast('請選擇品項', 'error'); return false; }
   if (!orderDate)          { if (!silent) toast('請填下單日期', 'error'); return false; }
-  if (!quantity || quantity < 1) { if (!silent) toast('請填入數量', 'error'); return false; }
+  if ((initMake || initGrind || initWash) && !initPerson) {
+    if (!silent) toast('已填初始進度，請選擇填寫人', 'error'); return false;
+  }
 
   state.pendingOrders.push({
     orderDate, dueDate,
@@ -3076,17 +3247,21 @@ function addToBatch(silent) {
     quantity,
     urgent: state.isUrgent,
     note,
+    initMake, initGrind, initWash, initPerson,
   });
   renderPending();
   if (!silent) toast(`已加入：${state.selectedItem} ×${quantity}`);
 
-  // 只清掉「單品項」欄位，保留日期 / 交期 / 廠商 / 急單，方便連續輸入
+  // 只清掉「單品項」欄位，保留日期 / 交期 / 廠商 / 急單 / 填寫人，方便連續輸入
   state.selectedItem = '';
   state.selectedStyle = '';
   state.selectedColor = '';
   state.selectedSize = '';
   document.getElementById('f-quantity').value = '';
   document.getElementById('f-note').value = '';
+  document.getElementById('f-init-make').value = '';
+  document.getElementById('f-init-grind').value = '';
+  document.getElementById('f-init-wash').value = '';
   const itemSel = document.getElementById('f-item');
   if (itemSel) itemSel.value = '';
   updateChipActive();
@@ -3121,6 +3296,7 @@ function renderPending() {
         <span class="pending-main">${dot}${escapeHtml(bits.join(' '))}
           <span class="pending-qty">×${p.quantity}</span>
           ${p.vendor ? `<span class="pending-vendor">${escapeHtml(p.vendor)}</span>` : ''}
+          ${(p.initMake || p.initGrind || p.initWash) ? `<span class="pending-vendor" style="color:var(--teal-2)">製${p.initMake||0}/磨${p.initGrind||0}/洗${p.initWash||0}${p.initPerson ? ' ' + escapeHtml(p.initPerson) : ''}</span>` : ''}
           ${p.urgent ? '<span class="pending-urgent">急</span>' : ''}
         </span>
         <button type="button" class="pending-del" onclick="removePending(${i})" title="移除">✕</button>
@@ -3134,12 +3310,20 @@ async function submitOrder(e) {
   if (btn.disabled) return;
 
   // 表單還留著一筆有效資料尚未加入 → 先自動補進清單
-  if (state.selectedItem && Number(document.getElementById('f-quantity').value) >= 1) {
+
+  // 清單是空的 → 把目前表單當成單筆訂單直接送（不用先「加入清單」）
+  if (state.pendingOrders.length === 0) {
+    if (!state.selectedItem) {
+      return toast('請先選擇品項', 'error');
+    }
+    if (!addToBatch(false)) return;   // 驗證沒過會跳明確提示並停下
+  } else if (state.selectedItem) {
+    // 清單已有資料、表單又還留著一筆 → 一起送
     addToBatch(true);
   }
 
   if (state.pendingOrders.length === 0) {
-    return toast('清單是空的，請先「加入清單」或填寫品項與數量', 'error');
+    return toast('清單是空的，請先填寫品項', 'error');
   }
 
   btn.disabled = true;
@@ -3151,7 +3335,7 @@ async function submitOrder(e) {
     const p = state.pendingOrders[i];
     btn.textContent = `送出中 ${i + 1}/${total}...`;
     try {
-      await api('addOrder', {
+      const created = await api('addOrder', {
         orderDate: p.orderDate,
         vendor: p.vendor || '',
         item: p.item,
@@ -3163,6 +3347,17 @@ async function submitOrder(e) {
         urgent: p.urgent,
         note: p.note || '',
       });
+      // 若有填初始進度、且後端有回傳新訂單 id，順手把製造/研磨/清洗紀錄一起寫入
+      let newId = null;
+      if (created) {
+        if (typeof created === 'string') newId = created;
+        else newId = created.id || (created.order && created.order.id) || null;
+      }
+      if (newId && p.initPerson) {
+        if (p.initMake  > 0) await api('addMakeLog',  { orderId: newId, date: p.orderDate, person: p.initPerson, quantity: p.initMake });
+        if (p.initGrind > 0) await api('addGrindLog', { orderId: newId, date: p.orderDate, person: p.initPerson, quantity: p.initGrind });
+        if (p.initWash  > 0) await api('addWashLog',  { orderId: newId, date: p.orderDate, person: p.initPerson, quantity: p.initWash });
+      }
       ok++;
     } catch (err) {
       remaining.push(p);

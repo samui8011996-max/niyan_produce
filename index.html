@@ -2328,7 +2328,7 @@ function hydrateFromCache() {
     if (!raw) return false;
     const c = JSON.parse(raw);
     state._allOrders = c.orders || [];
-    state.orders = state._allOrders.filter(o => !o.hidden);
+    applyLocalHidden();
     state.makeLogs     = c.makeLogs  || [];
     state.washLogs     = c.washLogs  || [];
     state.grindLogs    = c.grindLogs || [];
@@ -2348,7 +2348,7 @@ async function loadAll() {
   try {
     const data = await api('getAll');
     state._allOrders = data.orders || [];
-    state.orders     = state._allOrders.filter(o => !o.hidden);
+    applyLocalHidden();
     state.makeLogs = data.makeLogs || [];
     state.washLogs = data.washLogs || [];
     state.grindLogs = data.grindLogs || [];
@@ -2482,6 +2482,7 @@ function renderHistory() {
 
   // 確保 selection set 存在
   if (!state._selectedHistoryIds) state._selectedHistoryIds = new Set();
+  const localHidden = getLocalHidden();
 
   const searchEl = document.getElementById('history-search');
   const q = (searchEl?.value || '').trim().toLowerCase();
@@ -2527,10 +2528,9 @@ function renderHistory() {
     const isDone = o.done === true;
     let doneDate = '';
     if (isDone) {
-      // 完成日期＝按「標記完成」當天；舊資料沒有就退回最後一筆清洗日期
-      const localDone = doneDateMap[o.id];
-      if (localDone) {
-        doneDate = fmtDate(localDone);
+      // 完成日期：試算表同步欄優先，舊資料沒有就退回最後一筆清洗日期
+      if (o.doneDate) {
+        doneDate = fmtDate(o.doneDate);
       } else {
         const logs = state.washLogs
           .filter(l => l.orderId === o.id)
@@ -2538,7 +2538,7 @@ function renderHistory() {
         if (logs.length) doneDate = fmtDate(logs[0].date);
       }
     }
-    const isLocalHidden = o.hidden === true;
+    const isLocalHidden = localHidden.has(o.id);
 let status = '進行中', statusKey = 'is-ongoing';
 if (isLocalHidden) { status = '已隱藏'; statusKey = 'is-hidden'; }
     else if (isDone) { status = '已完成'; statusKey = 'is-done'; }
@@ -3357,28 +3357,27 @@ async function toggleOrderDone() {
   if (!o) return;
 
   const newDone = !o.done;
+  const newDoneDate = newDone ? today() : '';   // 完成日期＝按下的那一天
   const btn = document.getElementById('modal-done');
   if (btn && btn.disabled) return;
   if (btn) { btn.disabled = true; btn.textContent = '處理中...'; }
 
   // 樂觀更新（同步更新 _allOrders 讓歷史頁也即時反映）
-  // 樂觀更新（同步更新 _allOrders 讓歷史頁也即時反映）
-  const prevDoneDate = getDoneDateMap()[orderId] || null;
+  const prevDone = o.done;
+  const prevDoneDate = o.doneDate || '';
   o.done = newDone;
+  o.doneDate = newDoneDate;
   const ao = (state._allOrders || []).find(x => x.id === orderId);
-  if (ao) ao.done = newDone;
-  // 完成日期＝按下的那一天；取消完成則清除
-  setDoneDate(orderId, newDone ? today() : null);
+  if (ao) { ao.done = newDone; ao.doneDate = newDoneDate; }
 
   try {
-    await api('setOrderDone', { id: orderId, done: newDone });
+    await api('setOrderDone', { id: orderId, done: newDone, doneDate: newDoneDate });
     toast(newDone ? '已標記完成' : '已取消完成');
     renderBoard();
     renderHistory();
   } catch (err) {
-    o.done = !newDone;
-    if (ao) ao.done = !newDone;
-    setDoneDate(orderId, prevDoneDate);   // 失敗還原原本的完成日期
+    o.done = prevDone; o.doneDate = prevDoneDate;
+    if (ao) { ao.done = prevDone; ao.doneDate = prevDoneDate; }
     toast('更新失敗：' + err.message, 'error');
   } finally {
     if (btn) btn.disabled = false;
@@ -3401,38 +3400,23 @@ function updateModalDoneBtn() {
     btn.style.color = 'var(--done)';
   }
 }
-async function hideOrderFromCard(id) {
-  const ao = (state._allOrders || []).find(x => x.id === id);
-  if (ao) ao.hidden = true;                                  // 樂觀更新
-  state.orders = (state._allOrders || []).filter(o => !o.hidden);
+function hideOrderFromCard(id) {
+  const set = getLocalHidden();
+  set.add(id);
+  saveLocalHidden(set);
+  applyLocalHidden();
   renderBoard();
-  try {
-    await api('setOrderHidden', { id, hidden: true });
-    toast('已隱藏（已同步）');
-    renderHistory();
-  } catch (err) {
-    if (ao) ao.hidden = false;                               // 失敗還原
-    state.orders = (state._allOrders || []).filter(o => !o.hidden);
-    renderBoard();
-    toast('隱藏失敗：' + err.message, 'error');
-  }
+  renderHistory();
+  toast('已隱藏（僅本機）');
 }
-async function restoreOrder(id) {
-  const ao = (state._allOrders || []).find(x => x.id === id);
-  if (ao) ao.hidden = false;                                 // 樂觀更新
-  state.orders = (state._allOrders || []).filter(o => !o.hidden);
+function restoreOrder(id) {
+  const set = getLocalHidden();
+  set.delete(id);
+  saveLocalHidden(set);
+  applyLocalHidden();
   renderHistory();
   renderBoard();
-  try {
-    await api('setOrderHidden', { id, hidden: false });
-    toast('已恢復顯示（已同步）');
-  } catch (err) {
-    if (ao) ao.hidden = true;
-    state.orders = (state._allOrders || []).filter(o => !o.hidden);
-    renderHistory();
-    renderBoard();
-    toast('恢復失敗：' + err.message, 'error');
-  }
+  toast('已恢復顯示（僅本機）');
 }
 
 const LOCAL_HIDDEN_KEY = 'niyan_hidden_ids';
@@ -3448,6 +3432,12 @@ function saveLocalHidden(set) {
   try {
     localStorage.setItem(LOCAL_HIDDEN_KEY, JSON.stringify([...set]));
   } catch {}
+}
+
+// 依「本機隱藏清單」重算看板要顯示的訂單(隱藏純本機、不同步)
+function applyLocalHidden() {
+  const hidden = getLocalHidden();
+  state.orders = (state._allOrders || []).filter(o => !hidden.has(o.id));
 }
 
 

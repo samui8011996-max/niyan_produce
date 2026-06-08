@@ -398,6 +398,10 @@
     border-color: var(--urgent);
     box-shadow: 0 0 6px var(--urgent-glow);
   }
+/* 隱藏鍵與上下排序鍵之間拉開距離，避免誤觸 */
+  .card-act-btn.hide-btn + .card-act-btn {
+    margin-top: 14px;
+  }
   /* 急單樣式 */
   .card.urgent .card-act-btn:not(.hide-btn) {
     color: #ffd690;
@@ -2403,6 +2407,45 @@ function markTouched(orderId) {
   saveTouchMap(m);
 }
 
+/* ====== 本機手動排序（不同步，只存這台裝置）====== */
+const MANUAL_ORDER_KEY = 'niyan_manual_order';
+function getManualOrder() {
+  try { return JSON.parse(localStorage.getItem(MANUAL_ORDER_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveManualOrder(arr) {
+  try { localStorage.setItem(MANUAL_ORDER_KEY, JSON.stringify(arr)); } catch {}
+}
+
+// 依手動順序排出「未完成」訂單的 id；新進來的訂單依預設規則放最上面
+function orderedActiveIds_(active) {
+  const saved = getManualOrder();
+  const activeIds = new Set(active.map(o => o.id));
+  const kept = saved.filter(id => activeIds.has(id));          // 保留仍有效的手動順序
+  const keptSet = new Set(kept);
+  const fresh = active.filter(o => !keptSet.has(o.id))         // 尚未排入的新訂單
+                      .sort(defaultSortCompare_)
+                      .map(o => o.id);
+  const merged = [...fresh, ...kept];
+  // 有變動才寫回
+  if (merged.length !== saved.length || merged.some((id, i) => id !== saved[i])) {
+    saveManualOrder(merged);
+  }
+  return merged;
+}
+
+// 上移 / 下移：跟相鄰那張卡交換位置
+function moveOrder(id, dir) {
+  const arr = getManualOrder();
+  const i = arr.indexOf(id);
+  if (i === -1) return;
+  const j = dir === 'up' ? i - 1 : i + 1;
+  if (j < 0 || j >= arr.length) return;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  saveManualOrder(arr);
+  renderBoard();
+}
+
 // 完成日期（本地紀錄）：按「標記完成」當天，不與試算表共享
 const DONE_DATE_KEY = 'niyan_done_dates';
 function getDoneDateMap() {
@@ -2447,7 +2490,9 @@ function renderBoard() {
   done.sort(defaultSortCompare_);
 
   // 未完成套用手動排序
-  const activeFinal = sortActive_(active);
+  // 未完成套用本機手動排序
+  const orderedIds = orderedActiveIds_(active);
+  const activeFinal = orderedIds.map(id => active.find(o => o.id === id)).filter(Boolean);
 
   const list = [...activeFinal, ...done];
 
@@ -2704,7 +2749,7 @@ async function purgeSelectedOrders() {
   }
 }
 
-function renderCard(o) {
+function renderCard(o, pos = {}) {
   const { made, ground, washed } = getOrderProgress(o.id);
   const done = o.done === true;
   const sizeText = o.size;
@@ -2721,10 +2766,13 @@ function renderCard(o) {
 
   // 卡片右側功能組：上下箭頭（未完成）+ 隱藏訂單（所有訂單都有）
 // 卡片右側功能組：隱藏訂單（手動排序已移除）
+  // 卡片右側功能組：隱藏鍵 + 上下排序（皆本機）
   const hideHtml = `
-    <button type="button" class="card-act-btn hide-btn" onclick="event.stopPropagation();hideOrderFromCard('${o.id}')" aria-label="隱藏訂單" title="隱藏訂單">✕</button>
-  `;
-  const cardActions = `<div class="card-actions" onclick="event.stopPropagation()">${hideHtml}</div>`;
+    <button type="button" class="card-act-btn hide-btn" onclick="event.stopPropagation();hideOrderFromCard('${o.id}')" aria-label="隱藏訂單" title="隱藏訂單">✕</button>`;
+  const sortHtml = isDone_(o) ? '' : `
+    <button type="button" class="card-act-btn" ${pos.canUp ? '' : 'disabled'} onclick="event.stopPropagation();moveOrder('${o.id}','up')" aria-label="上移" title="上移">▲</button>
+    <button type="button" class="card-act-btn" ${pos.canDown ? '' : 'disabled'} onclick="event.stopPropagation();moveOrder('${o.id}','down')" aria-label="下移" title="下移">▼</button>`;
+  const cardActions = `<div class="card-actions" onclick="event.stopPropagation()">${hideHtml}${sortHtml}</div>`;
 
   return `
     <div class="card ${o.urgent ? 'urgent' : ''} ${done ? 'done' : ''}" onclick="openModal('${o.id}')">

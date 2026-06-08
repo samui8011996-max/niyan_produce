@@ -380,12 +380,17 @@
     cursor: not-allowed;
   }
   /* 隱藏訂單鈕：跟箭頭視覺區隔 */
-  .card-act-btn.hide-btn {
-    margin-top: 4px;
-    color: var(--text-mute);
-    font-size: 13px;
-    border-color: rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.03);
+ .card-act-btn.hide-btn {
+    margin-top: 0;
+    width: 25px;
+    height: 25px;
+    color: var(--bg-0);
+    font-size: 12px;
+    font-weight: 900;
+    border-color: var(--teal-2);
+    background: var(--teal-2);
+    box-shadow: 0 0 10px var(--teal-glow);
+    opacity: 1;
   }
   .card-act-btn.hide-btn:hover {
     background: var(--urgent);
@@ -1694,6 +1699,35 @@
     display: flex; gap: 8px; margin-top: 10px;
   }
 
+  /* ===== 品項下拉 + 批次清單（新增） ===== */
+  .item-select-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .item-select-row select { flex: 1 1 200px; min-width: 0; }
+
+  .pending-list { display: flex; flex-direction: column; gap: 8px; }
+  .pending-row {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg-0);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--teal-1);
+    border-radius: 4px;
+    padding: 10px 12px;
+  }
+  .pending-row.urgent { border-left-color: var(--urgent); }
+  .pending-main {
+    flex: 1; min-width: 0;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-weight: 700; color: var(--text); letter-spacing: 0.5px;
+  }
+  .pending-qty { color: var(--teal-2); font-family: 'Orbitron', sans-serif; font-weight: 700; }
+  .pending-vendor { color: var(--text-dim); font-size: 13px; font-weight: 500; }
+  .pending-urgent { background: var(--urgent); color: #fff; font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 2px; }
+  .pending-del {
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: 4px;
+    background: rgba(255,45,85,0.1); border: 1px solid var(--line);
+    color: var(--text-mute); cursor: pointer; font-weight: 900; line-height: 1;
+  }
+  .pending-del:hover { background: var(--urgent); color: #fff; border-color: var(--urgent); }
+
 </style>
 </head>
 <body class="page-board-active">
@@ -1765,7 +1799,7 @@
 
     <div class="field">
       <label>下單日期 <span class="req">*</span></label>
-      <input type="date" id="f-orderDate" required>
+      <input type="date" id="f-orderDate">
     </div>
 
     <div class="field">
@@ -1776,9 +1810,13 @@
       </div>
     </div>
 
-    <div class="field full">
+   <div class="field full">
       <label>品項 <span class="req">*</span></label>
-      <div class="chip-group" id="item-chips"></div>
+      <div class="item-select-row">
+        <select id="f-item" onchange="selectItemFromDropdown(this.value)"></select>
+        <button type="button" class="chip add-new" onclick="addCustom('item')">+ 新增</button>
+        <button type="button" class="chip" onclick="deleteCurrentItem()" title="刪除目前選的自訂品項">🗑</button>
+      </div>
     </div>
 
     <div class="field full">
@@ -1804,7 +1842,7 @@
     <div class="field full">
       <label>數量 <span class="req">*</span></label>
       <div class="qty-input-row">
-        <input type="number" id="f-quantity" min="1" required placeholder="輸入數量">
+        <input type="number" id="f-quantity" min="1" placeholder="輸入數量">
         <div class="qty-quickadd">
           <button type="button" class="chip qty-add" data-add-qty="1">+1</button>
           <button type="button" class="chip qty-add" data-add-qty="5">+5</button>
@@ -1830,9 +1868,15 @@
       <textarea id="f-note" rows="2" placeholder="其他補充說明（選填）"></textarea>
     </div>
 
+    <div class="field full" id="pending-wrap" style="display:none;">
+      <label>待送出清單 <span id="pending-count" style="color:var(--teal-2);font-family:'Orbitron',sans-serif;">(0)</span></label>
+      <div class="pending-list" id="pending-list"></div>
+    </div>
+
     <div class="actions">
-      <button type="button" class="btn btn-secondary" onclick="resetForm()">重置</button>
-      <button type="submit" class="btn btn-primary" id="submit-btn">送出訂單</button>
+      <button type="button" class="btn btn-secondary" onclick="resetForm()">清空表單</button>
+      <button type="button" class="btn btn-secondary" id="add-batch-btn" onclick="addToBatch()">＋ 加入清單</button>
+      <button type="submit" class="btn btn-primary" id="submit-btn">送出全部</button>
     </div>
   </form>
 </section>
@@ -2156,6 +2200,7 @@ const state = {
   customColors: [],
   customSizes: [],
   // 表單
+  pendingOrders: [],
   selectedVendor: '',
   selectedItem: '',
   selectedStyle: '',
@@ -2341,6 +2386,35 @@ function getOrderProgress(orderId) {
   return { made, ground, washed };
 }
 
+/* ====== 本地「最近處理」排序（不與試算表共享，只存這台裝置） ======
+   有人記錄製造 / 研磨 / 清洗後，該筆訂單自動置頂。 */
+const TOUCH_KEY = 'niyan_touch_order';
+function getTouchMap() {
+  try { return JSON.parse(localStorage.getItem(TOUCH_KEY) || '{}'); }
+  catch { return {}; }
+}
+function saveTouchMap(m) {
+  try { localStorage.setItem(TOUCH_KEY, JSON.stringify(m)); } catch {}
+}
+function markTouched(orderId) {
+  if (!orderId) return;
+  const m = getTouchMap();
+  m[orderId] = Date.now();
+  saveTouchMap(m);
+}
+
+// 完成日期（本地紀錄）：按「標記完成」當天，不與試算表共享
+const DONE_DATE_KEY = 'niyan_done_dates';
+function getDoneDateMap() {
+  try { return JSON.parse(localStorage.getItem(DONE_DATE_KEY) || '{}'); }
+  catch { return {}; }
+}
+function setDoneDate(orderId, date) {
+  const m = getDoneDateMap();
+  if (date) m[orderId] = date; else delete m[orderId];
+  try { localStorage.setItem(DONE_DATE_KEY, JSON.stringify(m)); } catch {}
+}
+
 // 預設排序（原規則）：急單在前、舊的在前
 function defaultSortCompare_(a, b) {
   const aU = a.urgent ? 0 : 1;
@@ -2351,13 +2425,15 @@ function defaultSortCompare_(a, b) {
   return da - db;
 }
 
-// 排序：有 manualRank 的訂單按 rank 升冪（越小越前），沒有的按原規則墊後
+// 排序：本地最近處理過的訂單置頂（新→舊），其餘照原規則
 function sortActive_(active) {
-  const ranked = active.filter(o => Number(o.manualRank) > 0);
-  const unranked = active.filter(o => !Number(o.manualRank));
-  ranked.sort((a, b) => Number(a.manualRank) - Number(b.manualRank));
-  unranked.sort(defaultSortCompare_);
-  return [...ranked, ...unranked];
+  const touch = getTouchMap();
+  return [...active].sort((a, b) => {
+    const ta = touch[a.id] || 0;
+    const tb = touch[b.id] || 0;
+    if (ta !== tb) return tb - ta;
+    return defaultSortCompare_(a, b);
+  });
 }
 
 function renderBoard() {
@@ -2390,42 +2466,7 @@ function renderBoard() {
 }
 
 // 上/下移：交換兩張卡的位置，並寫回後端
-async function moveOrder(id, direction) {
-  // 防短時間重複觸發
-  if (state._moveBusy) return;
 
-  const active = state.orders.filter(o => !isDone_(o));
-  const sorted = sortActive_(active);
-  const idx = sorted.findIndex(o => o.id === id);
-  if (idx === -1) return;
-  const newIdx = direction === 'up' ? idx - 1 : idx + 1;
-  if (newIdx < 0 || newIdx >= sorted.length) return;
-
-  // 樂觀更新：先在前端調換 manualRank
-  // 為了讓所有現有順序都「鎖定」，我們把整列重新編號
-  // 交換
-  [sorted[idx], sorted[newIdx]] = [sorted[newIdx], sorted[idx]];
-  // 重新編號（從 1 開始遞增、留間隔以後好插入）
-  const updates = sorted.map((o, i) => ({ id: o.id, rank: (i + 1) * 10 }));
-
-  // 更新本地 state 立刻 re-render
-  updates.forEach(u => {
-    const o = state.orders.find(x => x.id === u.id);
-    if (o) o.manualRank = u.rank;
-  });
-  renderBoard();
-
-  // 背景送 API
-  state._moveBusy = true;
-  try {
-    await api('setOrderRanks', { updates });
-  } catch (err) {
-    toast('排序儲存失敗，正在還原：' + err.message, 'error');
-    await loadAll(); // 拉回伺服器狀態
-  } finally {
-    state._moveBusy = false;
-  }
-}
 
 function isDone_(o) {
   // 「已完成」改為手動標記（存於試算表「已完成」欄）
@@ -2476,6 +2517,8 @@ function renderHistory() {
   }
 
   // 為每筆訂單預先計算狀態
+ // 為每筆訂單預先計算狀態
+  const doneDateMap = getDoneDateMap();
   const enriched = filtered.map(o => {
     const made = state.makeLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.quantity || 0), 0);
     const washed = state.washLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.quantity || 0), 0);
@@ -2484,11 +2527,16 @@ function renderHistory() {
     const isDone = o.done === true;
     let doneDate = '';
     if (isDone) {
-      // 完成日期取最後一筆「清洗」紀錄
-      const logs = state.washLogs
-        .filter(l => l.orderId === o.id)
-        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-      if (logs.length) doneDate = fmtDate(logs[0].date);
+      // 完成日期＝按「標記完成」當天；舊資料沒有就退回最後一筆清洗日期
+      const localDone = doneDateMap[o.id];
+      if (localDone) {
+        doneDate = fmtDate(localDone);
+      } else {
+        const logs = state.washLogs
+          .filter(l => l.orderId === o.id)
+          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        if (logs.length) doneDate = fmtDate(logs[0].date);
+      }
     }
     const isLocalHidden = o.hidden === true;
 let status = '進行中', statusKey = 'is-ongoing';
@@ -2656,13 +2704,11 @@ async function purgeSelectedOrders() {
   }
 }
 
-function renderCard(o, sortInfo) {
+function renderCard(o) {
   const { made, ground, washed } = getOrderProgress(o.id);
   const done = o.done === true;
   const sizeText = o.size;
   const dueText = o.dueDate === '無' || !o.dueDate ? '無交期' : fmtDate(o.dueDate);
-  const canUp = sortInfo?.canUp;
-  const canDown = sortInfo?.canDown;
 
   const parts = [];
   if (o.item) parts.push(`<span class="item-name">${escapeHtml(o.item)}</span>`);
@@ -2674,14 +2720,11 @@ function renderCard(o, sortInfo) {
   if (sizeText) parts.push(`<span class="item-size"><strong>${escapeHtml(sizeText)}</strong></span>`);
 
   // 卡片右側功能組：上下箭頭（未完成）+ 隱藏訂單（所有訂單都有）
-  const arrowsHtml = (canUp || canDown) ? `
-    <button type="button" class="card-act-btn" ${canUp ? '' : 'disabled'} onclick="event.stopPropagation();moveOrder('${o.id}', 'up')" aria-label="往上">▲</button>
-    <button type="button" class="card-act-btn" ${canDown ? '' : 'disabled'} onclick="event.stopPropagation();moveOrder('${o.id}', 'down')" aria-label="往下">▼</button>
-  ` : '';
+// 卡片右側功能組：隱藏訂單（手動排序已移除）
   const hideHtml = `
     <button type="button" class="card-act-btn hide-btn" onclick="event.stopPropagation();hideOrderFromCard('${o.id}')" aria-label="隱藏訂單" title="隱藏訂單">✕</button>
   `;
-  const cardActions = `<div class="card-actions" onclick="event.stopPropagation()">${arrowsHtml}${hideHtml}</div>`;
+  const cardActions = `<div class="card-actions" onclick="event.stopPropagation()">${hideHtml}</div>`;
 
   return `
     <div class="card ${o.urgent ? 'urgent' : ''} ${done ? 'done' : ''}" onclick="openModal('${o.id}')">
@@ -2743,12 +2786,15 @@ function renderFormOptions() {
     state.customVendors.map(v => chipHtml(v, 'vendor', true)).join('') +
     `<button type="button" class="chip add-new" data-add="vendor">+ 新增</button>`;
 
-  // 品項
-  document.getElementById('item-chips').innerHTML =
-    DEFAULT_ITEMS.map(v => chipHtml(v, 'item', false)).join('') +
-    state.customItems.map(v => chipHtml(v, 'item', true)).join('') +
-    `<button type="button" class="chip add-new" data-add="item">+ 新增</button>`;
-
+ // 品項（下拉選單）
+  const itemSel = document.getElementById('f-item');
+  if (itemSel) {
+    const opts = ['<option value="">— 選擇品項 —</option>']
+      .concat(DEFAULT_ITEMS.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`))
+      .concat(state.customItems.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}（自訂）</option>`));
+    itemSel.innerHTML = opts.join('');
+    itemSel.value = state.selectedItem || '';
+  }
   // 款式
   document.getElementById('style-chips').innerHTML =
     DEFAULT_STYLES.map(v => chipHtml(v, 'style', false)).join('') +
@@ -2942,52 +2988,154 @@ function resetForm() {
   document.getElementById('due-none-chip').classList.remove('active');
   document.getElementById('f-quantity').value = '';
   document.getElementById('f-note').value = '';
+  const itemSel = document.getElementById('f-item');
+  if (itemSel) itemSel.value = '';
   updateChipActive();
 }
 
-async function submitOrder(e) {
-  e.preventDefault();
-  const btn = document.getElementById('submit-btn');
-  if (btn.disabled) return;  // 防雙擊
 
-  if (!state.selectedItem) return toast('請選擇品項', 'error');
+/* ====== 品項下拉選單 ====== */
+function selectItemFromDropdown(value) {
+  state.selectedItem = value || '';
+}
+function deleteCurrentItem() {
+  const v = state.selectedItem;
+  if (!v) return toast('請先在下拉選單選擇要刪除的品項', 'error');
+  if (!state.customItems.includes(v)) return toast('內建品項無法刪除', 'warn');
+  deleteCustomOption('item', v);
+}
 
+/* ====== 批次下單（一次多筆品項） ====== */
+function addToBatch(silent) {
   const orderDate = document.getElementById('f-orderDate').value;
   const dueDate = document.getElementById('due-none-chip').classList.contains('active')
     ? '無' : document.getElementById('f-dueDate').value;
   const quantity = Number(document.getElementById('f-quantity').value);
-
-  if (!orderDate) return toast('請填下單日期', 'error');
-  if (!quantity || quantity < 1) return toast('請填入數量', 'error');
-
-  btn.disabled = true;
-  btn.textContent = '送出中...';
-
   const note = document.getElementById('f-note').value.trim();
 
-  try {
-    await api('addOrder', {
-      orderDate,
-      vendor: state.selectedVendor || '',
-      item: state.selectedItem,
-      style: state.selectedStyle || '',
-      color: state.selectedColor || '',
-      size: state.selectedSize || '',
-      quantity,
-      dueDate,
-      urgent: state.isUrgent,
-      note,
-    });
-    toast('訂單已建立');
+  if (!state.selectedItem) { if (!silent) toast('請選擇品項', 'error'); return false; }
+  if (!orderDate)          { if (!silent) toast('請填下單日期', 'error'); return false; }
+  if (!quantity || quantity < 1) { if (!silent) toast('請填入數量', 'error'); return false; }
+
+  state.pendingOrders.push({
+    orderDate, dueDate,
+    vendor: state.selectedVendor || '',
+    item: state.selectedItem,
+    style: state.selectedStyle || '',
+    color: state.selectedColor || '',
+    size: state.selectedSize || '',
+    quantity,
+    urgent: state.isUrgent,
+    note,
+  });
+  renderPending();
+  if (!silent) toast(`已加入：${state.selectedItem} ×${quantity}`);
+
+  // 只清掉「單品項」欄位，保留日期 / 交期 / 廠商 / 急單，方便連續輸入
+  state.selectedItem = '';
+  state.selectedStyle = '';
+  state.selectedColor = '';
+  state.selectedSize = '';
+  document.getElementById('f-quantity').value = '';
+  document.getElementById('f-note').value = '';
+  const itemSel = document.getElementById('f-item');
+  if (itemSel) itemSel.value = '';
+  updateChipActive();
+  return true;
+}
+
+function removePending(i) {
+  state.pendingOrders.splice(i, 1);
+  renderPending();
+}
+
+function renderPending() {
+  const wrap = document.getElementById('pending-wrap');
+  const list = document.getElementById('pending-list');
+  const count = document.getElementById('pending-count');
+  const submitBtn = document.getElementById('submit-btn');
+  const n = state.pendingOrders.length;
+  if (count) count.textContent = `(${n})`;
+  if (submitBtn) submitBtn.textContent = n > 0 ? `送出全部 (${n})` : '送出全部';
+  if (!wrap || !list) return;
+  if (n === 0) { wrap.style.display = 'none'; list.innerHTML = ''; return; }
+  wrap.style.display = 'block';
+  list.innerHTML = state.pendingOrders.map((p, i) => {
+    const bits = [p.item];
+    if (p.style) bits.push(`【${p.style}】`);
+    if (p.color) bits.push(p.color);
+    if (p.size)  bits.push(p.size);
+    const dot = (p.color && COLOR_HEX[p.color])
+      ? `<span class="hl-dot" style="background:${COLOR_HEX[p.color]}"></span>` : '';
+    return `
+      <div class="pending-row ${p.urgent ? 'urgent' : ''}">
+        <span class="pending-main">${dot}${escapeHtml(bits.join(' '))}
+          <span class="pending-qty">×${p.quantity}</span>
+          ${p.vendor ? `<span class="pending-vendor">${escapeHtml(p.vendor)}</span>` : ''}
+          ${p.urgent ? '<span class="pending-urgent">急</span>' : ''}
+        </span>
+        <button type="button" class="pending-del" onclick="removePending(${i})" title="移除">✕</button>
+      </div>`;
+  }).join('');
+}
+
+async function submitOrder(e) {
+  if (e) e.preventDefault();
+  const btn = document.getElementById('submit-btn');
+  if (btn.disabled) return;
+
+  // 表單還留著一筆有效資料尚未加入 → 先自動補進清單
+  if (state.selectedItem && Number(document.getElementById('f-quantity').value) >= 1) {
+    addToBatch(true);
+  }
+
+  if (state.pendingOrders.length === 0) {
+    return toast('清單是空的，請先「加入清單」或填寫品項與數量', 'error');
+  }
+
+  btn.disabled = true;
+  const total = state.pendingOrders.length;
+  let ok = 0;
+  const remaining = [];
+
+  for (let i = 0; i < state.pendingOrders.length; i++) {
+    const p = state.pendingOrders[i];
+    btn.textContent = `送出中 ${i + 1}/${total}...`;
+    try {
+      await api('addOrder', {
+        orderDate: p.orderDate,
+        vendor: p.vendor || '',
+        item: p.item,
+        style: p.style || '',
+        color: p.color || '',
+        size: p.size || '',
+        quantity: p.quantity,
+        dueDate: p.dueDate,
+        urgent: p.urgent,
+        note: p.note || '',
+      });
+      ok++;
+    } catch (err) {
+      remaining.push(p);
+    }
+  }
+
+  if (remaining.length === 0) {
+    toast(`已建立 ${ok} 筆訂單`);
+    state.pendingOrders = [];
+    renderPending();
     resetForm();
     await loadAll();
     setPage('board');
-  } catch (err) {
-    toast('送出失敗：' + err.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '送出訂單';
+  } else {
+    toast(`成功 ${ok} 筆，${remaining.length} 筆失敗（已保留在清單，可再送一次）`, 'error');
+    state.pendingOrders = remaining;
+    renderPending();
+    await loadAll();
   }
+
+  btn.disabled = false;
+  btn.textContent = state.pendingOrders.length > 0 ? `送出全部 (${state.pendingOrders.length})` : '送出全部';
 }
 
 /* ================================================
@@ -3188,6 +3336,7 @@ async function submitProgress() {
 
   try {
     await api(action, { orderId, date, person, quantity });
+    markTouched(orderId);          // 本地置頂：這筆剛被處理
     toast(`${label}已記錄：${person} +${quantity}`);
     await loadAll();
     renderModalProgress();
@@ -3213,9 +3362,13 @@ async function toggleOrderDone() {
   if (btn) { btn.disabled = true; btn.textContent = '處理中...'; }
 
   // 樂觀更新（同步更新 _allOrders 讓歷史頁也即時反映）
+  // 樂觀更新（同步更新 _allOrders 讓歷史頁也即時反映）
+  const prevDoneDate = getDoneDateMap()[orderId] || null;
   o.done = newDone;
   const ao = (state._allOrders || []).find(x => x.id === orderId);
   if (ao) ao.done = newDone;
+  // 完成日期＝按下的那一天；取消完成則清除
+  setDoneDate(orderId, newDone ? today() : null);
 
   try {
     await api('setOrderDone', { id: orderId, done: newDone });
@@ -3225,6 +3378,7 @@ async function toggleOrderDone() {
   } catch (err) {
     o.done = !newDone;
     if (ao) ao.done = !newDone;
+    setDoneDate(orderId, prevDoneDate);   // 失敗還原原本的完成日期
     toast('更新失敗：' + err.message, 'error');
   } finally {
     if (btn) btn.disabled = false;
@@ -3502,7 +3656,7 @@ function showConfigWarning() {
 
 (async function init() {
   document.getElementById('f-orderDate').value = today();
-  document.getElementById('f-dueDate').value = today();
+  document.getElementById('f-dueDate').value = '';
 
   Sound.init();  // 開始監聽使用者互動以解鎖音訊
 

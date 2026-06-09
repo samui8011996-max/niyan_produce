@@ -3692,6 +3692,25 @@ function openModal(orderId) {
   updateModalDoneBtn();
   document.getElementById('modal').classList.add('show');
 }
+// iOS：點 modal 內非輸入區就收鍵盤，避免 fixed 版面觸控錯位
+(function () {
+  const modal = document.getElementById('modal');
+  if (!modal) return;
+  modal.addEventListener('touchstart', (e) => {
+    if (!e.target.closest('input, textarea, select')) {
+      const ae = document.activeElement;
+      if (ae && /^(INPUT|TEXTAREA)$/.test(ae.tagName)) ae.blur();
+    }
+  }, { passive: true });
+
+  // 數字框聚焦時捲到中間，按鈕才不會被鍵盤蓋住
+  ['m-quantity', 'm-append-qty'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('focus', () => {
+      setTimeout(() => el.scrollIntoView({ block: 'center' }), 300);
+    });
+  });
+})();
 function renderModalSub(o) {
   if (!o) o = state.orders.find(x => x.id === state.currentOrderId);
   if (!o) return;

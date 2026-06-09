@@ -2051,7 +2051,7 @@
         </div>
         <div class="batch-field">
           <label>數量</label>
-          <input type="number" id="bn-quantity" min="1" placeholder="數量">
+          <input type="number" id="bn-quantity" min="1" placeholder="數量" inputmode="numeric">
         </div>
         <div class="batch-field">
           <label>初始進度（選填）— 填寫人沿用下方那個</label>
@@ -2167,7 +2167,7 @@
     <div class="field full">
       <label>數量</label>
       <div class="qty-input-row">
-        <input type="number" id="f-quantity" min="1" placeholder="輸入數量">
+       <input type="number" id="f-quantity" min="1" placeholder="輸入數量" inputmode="numeric">
        
       </div>
     </div>
@@ -2179,20 +2179,18 @@
 
         <div class="init-prog-item">
           <span class="init-prog-label" style="color:var(--teal-2)">製造</span>
-          <input type="number" id="f-init-make" min="0" placeholder="0">
+          <input type="number" id="f-init-make" min="0" placeholder="0" inputmode="numeric">
          
         </div>
 
         <div class="init-prog-item">
           <span class="init-prog-label" style="color:var(--ground)">研磨</span>
-          <input type="number" id="f-init-grind" min="0" placeholder="0">
-          
+          <input type="number" id="f-init-grind" min="0" placeholder="0" inputmode="numeric">
         </div>
 
         <div class="init-prog-item">
           <span class="init-prog-label" style="color:var(--warn)">清洗</span>
-          <input type="number" id="f-init-wash" min="0" placeholder="0">
-         
+          <input type="number" id="f-init-wash" min="0" placeholder="0" inputmode="numeric">
         </div>
 
         <div class="init-progress-person">
@@ -2337,7 +2335,7 @@
 <div class="qty-append-box">
       <div class="qty-append-label">修改訂單總數量<span id="m-append-current" style="margin-left:10px;color:var(--teal-2);font-family:'Orbitron',sans-serif;font-weight:700;letter-spacing:1px;">目前 — 件</span></div>
       <div class="qty-append-row">
-        <input type="number" id="m-append-qty" min="1" placeholder="輸入新的總數量">
+        <input type="number" id="m-append-qty" min="1" placeholder="輸入新的總數量" inputmode="numeric">
         <button type="button" class="btn btn-primary qty-append-btn" onclick="submitAppendQty()">追加</button>
       </div>
       
@@ -2741,6 +2739,18 @@ function markTouched(orderId) {
   const m = getTouchMap();
   m[orderId] = Date.now();
   saveTouchMap(m);
+
+  // 同步更新手動排序：把這筆移到最頂端
+  const arr = getManualOrder();
+  const i = arr.indexOf(orderId);
+  if (i > 0) {
+    arr.splice(i, 1);
+    arr.unshift(orderId);
+    saveManualOrder(arr);
+  } else if (i === -1) {
+    arr.unshift(orderId);
+    saveManualOrder(arr);
+  }
 }
 
 /* ====== 本機手動排序（不同步，只存這台裝置）====== */
@@ -2757,13 +2767,15 @@ function saveManualOrder(arr) {
 function orderedActiveIds_(active) {
   const saved = getManualOrder();
   const activeIds = new Set(active.map(o => o.id));
-  const kept = saved.filter(id => activeIds.has(id));          // 保留仍有效的手動順序
+  const kept = saved.filter(id => activeIds.has(id));
   const keptSet = new Set(kept);
-  const fresh = active.filter(o => !keptSet.has(o.id))         // 尚未排入的新訂單
+
+  // 新進來的訂單加到最前面
+  const fresh = active.filter(o => !keptSet.has(o.id))
                       .sort(defaultSortCompare_)
                       .map(o => o.id);
   const merged = [...fresh, ...kept];
-  // 有變動才寫回
+
   if (merged.length !== saved.length || merged.some((id, i) => id !== saved[i])) {
     saveManualOrder(merged);
   }

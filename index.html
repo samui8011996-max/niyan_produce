@@ -2085,10 +2085,10 @@
 
    <div class="batch-new" style="margin-bottom:14px;">
       <div class="batch-new-toggle" onclick="toggleBatchProgressSection()" id="batch-progress-toggle">
-        <span id="batch-progress-icon">▾</span> 填寫進度(可多筆填寫)
+        <span id="batch-progress-icon">▸</span>填寫進度(可多筆填寫)
         <span id="batch-progress-summary" style="margin-left:auto; font-size:12px; letter-spacing:1px;"></span>
       </div>
-      <div class="batch-new-box" id="batch-progress-box" style="display:block; padding:10px 12px; gap:10px;">
+      <div class="batch-new-box" id="batch-progress-box" style="display:none; padding:10px 12px; gap:10px;">
         <input type="text" id="batch-filter" class="history-search-input" placeholder="篩選…（品項、款式、廠商）" oninput="renderBatchRows()" style="width:100%; margin-bottom:8px;">
         <div class="batch-rows" id="batch-rows"></div>
       </div>
@@ -4053,21 +4053,23 @@ function renderBatchRows() {
     const { made, ground, washed } = getOrderProgress(o.id);
     const v = state.batchInput[o.id] || {};
     const isHidden = hiddenSet.has(o.id);
-    const dot = (o.color && COLOR_HEX[o.color])
-      ? `<span class="hl-dot" style="background:${COLOR_HEX[o.color]}"></span>` : '';
-    const bits = [`<span class="batch-row-item">${escapeHtml(o.item || '-')}</span>`];
+   const dot = (o.color && COLOR_HEX[o.color])
+      ? `<span class="hl-dot" style="background:${COLOR_HEX[o.color]};width:11px;height:11px;border-radius:50%;display:inline-block;border:1px solid rgba(255,255,255,0.2);margin-right:3px;vertical-align:middle;"></span>` : '';
+    const bits = [];
+    if (o.item) bits.push(`<span style="font-weight:900;color:var(--text);font-size:14px;">${escapeHtml(o.item)}</span>`);
+    if (o.color) bits.push(`<span style="color:var(--teal-2);">${dot}${escapeHtml(o.color)}</span>`);
     if (o.style) bits.push(`<span class="hl-style">${escapeHtml(o.style)}</span>`);
-    if (o.color || o.size) bits.push(`<span>${dot}${escapeHtml(o.color || '')}${o.size ? ' ' + escapeHtml(o.size) : ''}</span>`);
+    if (o.size)  bits.push(`<span style="color:var(--text-dim);font-size:13px;">${escapeHtml(o.size)}</span>`);
     return `
       <div class="batch-row ${o.urgent ? 'urgent' : ''} ${isHidden ? 'is-hidden' : ''}" data-oid="${o.id}">
-        <div class="batch-row-info">
-          <div class="batch-row-name">${bits.join(' ')}${o.urgent ? '<span class="pending-urgent">急</span>' : ''}</div>
+        <div class="batch-row-info" style="flex:1;min-width:0;">
+          <div class="batch-row-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${bits.join('')}${o.urgent ? '<span class="pending-urgent">急</span>' : ''}</div>
           <div class="batch-row-meta">${o.vendor ? escapeHtml(o.vendor) + ' · ' : ''}訂<b>${o.quantity}</b> 製<b>${made}</b> 磨<b>${ground}</b> 洗<b>${washed}</b></div>
         </div>
-        <div class="batch-row-inputs">
-          <label class="bi make">製<input type="number" min="0" inputmode="numeric" value="${v.make || ''}" onfocus="batchSetTarget('${o.id}','make')" oninput="batchRowInput('${o.id}','make',this.value)" placeholder="0"></label>
-          <label class="bi grind">磨<input type="number" min="0" inputmode="numeric" value="${v.grind || ''}" onfocus="batchSetTarget('${o.id}','grind')" oninput="batchRowInput('${o.id}','grind',this.value)" placeholder="0"></label>
-          <label class="bi wash">洗<input type="number" min="0" inputmode="numeric" value="${v.wash || ''}" onfocus="batchSetTarget('${o.id}','wash')" oninput="batchRowInput('${o.id}','wash',this.value)" placeholder="0"></label>
+        <div class="batch-row-inputs" style="display:flex;gap:6px;align-items:flex-end;flex-shrink:0;">
+          <label class="bi make" style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--teal-2);">製<input type="number" min="0" inputmode="numeric" value="${v.make || ''}" onfocus="batchSetTarget('${o.id}','make')" oninput="batchRowInput('${o.id}','make',this.value)" placeholder="0"></label>
+          <label class="bi grind" style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--ground);">磨<input type="number" min="0" inputmode="numeric" value="${v.grind || ''}" onfocus="batchSetTarget('${o.id}','grind')" oninput="batchRowInput('${o.id}','grind',this.value)" placeholder="0"></label>
+          <label class="bi wash" style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--warn);">洗<input type="number" min="0" inputmode="numeric" value="${v.wash || ''}" onfocus="batchSetTarget('${o.id}','wash')" oninput="batchRowInput('${o.id}','wash',this.value)" placeholder="0"></label>
         </div>
       </div>`;
   }).join('');

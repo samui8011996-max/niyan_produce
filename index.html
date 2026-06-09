@@ -2077,21 +2077,25 @@
           <button type="button" class="btn btn-secondary" onclick="bnAddToList()">＋ 加入清單</button>
         </div>
       </div>
-      </div>
       <div id="bn-pending-wrap" style="display:none; padding:14px; border-top:1px dashed var(--line);">
-        <label class="batch-new-pending-label">待建立 <span id="bn-pending-count" style="color:var(--teal-2);font-family:'Orbitron',sans-serif;">(0)</span></label>
+        <label class="batch-new-pending-label">待建立 <span id="bn-pending-count" ...>(0)</span></label>
         <div class="pending-list" id="bn-pending-list"></div>
       </div>
+    </div>  <!-- 這裡才關掉 batch-new -->
 
    <div class="batch-new" style="margin-bottom:14px;">
       <div class="batch-new-toggle" onclick="toggleBatchProgressSection()" id="batch-progress-toggle">
-        <span id="batch-progress-icon">▸</span>填寫進度(可多筆填寫)
+        <span id="batch-progress-icon">▸</span>填寫進度 (可多筆填寫)
         <span id="batch-progress-summary" style="margin-left:auto; font-size:12px; letter-spacing:1px;"></span>
       </div>
       <div class="batch-new-box" id="batch-progress-box" style="display:none; padding:10px 12px; gap:10px;">
-        <input type="text" id="batch-filter" class="history-search-input" placeholder="篩選…（品項、款式、廠商）" oninput="renderBatchRows()" style="width:100%; margin-bottom:8px;">
-        <div class="batch-rows" id="batch-rows"></div>
-      </div>
+ 
+  <div class="batch-rows" id="batch-rows"></div>
+</div>
+<div id="batch-filled-list" style="display:none; padding:10px 12px; border-top:1px dashed var(--line);">
+  <div style="font-size:11px;letter-spacing:2px;color:var(--teal-2);font-weight:700;margin-bottom:8px;">已填清單</div>
+  <div id="batch-filled-rows" style="display:flex;flex-direction:column;gap:6px;"></div>
+</div>
     </div>
     <div class="batch-summary" id="batch-summary" style="margin-bottom:10px;"></div>
     <div class="batch-shared" style="margin-bottom:12px;">
@@ -3935,6 +3939,7 @@ if (state.bnSelectedVendor === undefined) state.bnSelectedVendor = '';
 if (state.bnUrgent === undefined)         state.bnUrgent = false;
 if (state.bnDueNone === undefined)        state.bnDueNone = false;
 if (state.bnPending === undefined)        state.bnPending = [];
+if (state.batchFilled === undefined)      state.batchFilled = [];
 function toggleBatchPanel() {
   const panel = document.getElementById('batch-progress-panel');
   const btn = document.getElementById('batch-toggle-btn');
@@ -3975,6 +3980,7 @@ function batchRowInput(oid, field, val) {
   if (!state.batchInput[oid]) state.batchInput[oid] = { make: 0, grind: 0, wash: 0 };
   state.batchInput[oid][field] = Number(val) || 0;
   updateBatchSummary();
+  renderBatchFilledList();
 }
 function batchSetTarget(oid, field) {
   state.batchActiveTarget = { oid, field };
@@ -4013,6 +4019,54 @@ function updateBatchSummary() {
     if (sum > 0) { rows++; total += sum; }
   }
   el.textContent = rows ? `已填 ${rows} 筆 · 共 ${total} 件` : '尚未填寫';
+}
+function renderBatchFilledList() {
+  const wrap = document.getElementById('batch-filled-list');
+  const rows = document.getElementById('batch-filled-rows');
+  if (!wrap || !rows) return;
+
+  const entries = [];
+  for (const oid in state.batchInput) {
+    const v = state.batchInput[oid];
+    const sum = (v.make || 0) + (v.grind || 0) + (v.wash || 0);
+    if (sum === 0) continue;
+    const o = (state._allOrders || state.orders).find(x => x.id === oid);
+    if (!o) continue;
+
+    const dot = (o.color && COLOR_HEX[o.color])
+      ? `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${COLOR_HEX[o.color]};border:1px solid rgba(255,255,255,0.2);vertical-align:middle;margin-right:2px;"></span>` : '';
+
+    const nameParts = [];
+    if (o.item)  nameParts.push(`<span style="font-weight:700;color:var(--text);">${escapeHtml(o.item)}</span>`);
+    if (o.color) nameParts.push(`<span style="color:var(--teal-2);">${dot}${escapeHtml(o.color)}</span>`);
+    if (o.style) nameParts.push(`<span style="color:var(--warn);border:1px solid var(--warn);padding:0 4px;border-radius:2px;font-size:10px;font-weight:700;">${escapeHtml(o.style)}</span>`);
+    if (o.size)  nameParts.push(`<span style="color:var(--text-dim);">${escapeHtml(o.size)}</span>`);
+
+    const nums = [];
+    if (v.make  > 0) nums.push(`<span style="color:var(--teal-2);font-family:'Orbitron',sans-serif;font-weight:700;">製+${v.make}</span>`);
+    if (v.grind > 0) nums.push(`<span style="color:var(--ground);font-family:'Orbitron',sans-serif;font-weight:700;">磨+${v.grind}</span>`);
+    if (v.wash  > 0) nums.push(`<span style="color:var(--warn);font-family:'Orbitron',sans-serif;font-weight:700;">洗+${v.wash}</span>`);
+
+    entries.push(`
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+                  background:var(--bg-0);border:1px solid var(--line);
+                  border-left:3px solid var(--teal-1);border-radius:4px;
+                  padding:7px 10px;font-size:13px;">
+        <span style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;flex:1;min-width:0;">
+          ${nameParts.join('')}
+        </span>
+        <span style="display:flex;gap:8px;flex-shrink:0;">
+          ${nums.join('')}
+        </span>
+      </div>`);
+  }
+
+  if (entries.length === 0) {
+    wrap.style.display = 'none';
+  } else {
+    wrap.style.display = 'block';
+    rows.innerHTML = entries.join('');
+  }
 }
 function clearBatchContent() {
   const has = Object.values(state.batchInput).some(v => (v.make || 0) + (v.grind || 0) + (v.wash || 0) > 0);
@@ -4404,21 +4458,41 @@ function renderBnPending() {
   if (n === 0) { wrap.style.display = 'none'; list.innerHTML = ''; return; }
   wrap.style.display = 'block';
   list.innerHTML = state.bnPending.map((p, i) => {
-    const bits = [p.item];
-    if (p.style) bits.push(`【${p.style}】`);
-    if (p.color) bits.push(p.color);
-    if (p.size)  bits.push(p.size);
-    const dot = (p.color && COLOR_HEX[p.color]) ? `<span class="hl-dot" style="background:${COLOR_HEX[p.color]}"></span>` : '';
-    const hasInit = (p.initMake || p.initGrind || p.initWash);
+    const dot = (p.color && COLOR_HEX[p.color])
+      ? `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${COLOR_HEX[p.color]};border:1px solid rgba(255,255,255,0.2);vertical-align:middle;margin-right:2px;"></span>` : '';
+
+    const nameParts = [];
+    if (p.item)  nameParts.push(`<span style="font-weight:700;color:var(--text);">${escapeHtml(p.item)}</span>`);
+    if (p.color) nameParts.push(`<span style="color:var(--teal-2);">${dot}${escapeHtml(p.color)}</span>`);
+    if (p.style) nameParts.push(`<span style="color:var(--warn);border:1px solid var(--warn);padding:0 4px;border-radius:2px;font-size:10px;font-weight:700;">${escapeHtml(p.style)}</span>`);
+    if (p.size)  nameParts.push(`<span style="color:var(--text-dim);">${escapeHtml(p.size)}</span>`);
+    if (p.vendor) nameParts.push(`<span style="color:var(--text-dim);font-size:12px;">${escapeHtml(p.vendor)}</span>`);
+
+    const nums = [];
+    nums.push(`<span style="color:var(--text);font-family:'Orbitron',sans-serif;font-weight:700;">×${p.quantity}</span>`);
+    if ((p.initMake||0) > 0)  nums.push(`<span style="color:var(--teal-2);font-family:'Orbitron',sans-serif;font-weight:700;">製+${p.initMake}</span>`);
+    if ((p.initGrind||0) > 0) nums.push(`<span style="color:var(--ground);font-family:'Orbitron',sans-serif;font-weight:700;">磨+${p.initGrind}</span>`);
+    if ((p.initWash||0) > 0)  nums.push(`<span style="color:var(--warn);font-family:'Orbitron',sans-serif;font-weight:700;">洗+${p.initWash}</span>`);
+    if (p.urgent) nums.push(`<span style="background:var(--urgent);color:#fff;font-size:11px;font-weight:900;padding:1px 7px;border-radius:2px;">急</span>`);
+
     return `
-      <div class="pending-row ${p.urgent ? 'urgent' : ''}">
-        <span class="pending-main">${dot}${escapeHtml(bits.join(' '))}
-          <span class="pending-qty">×${p.quantity}</span>
-          ${p.vendor ? `<span class="pending-vendor">${escapeHtml(p.vendor)}</span>` : ''}
-          ${hasInit ? `<span class="pending-vendor" style="color:var(--teal-2)">製${p.initMake||0}/磨${p.initGrind||0}/洗${p.initWash||0}</span>` : ''}
-          ${p.urgent ? '<span class="pending-urgent">急</span>' : ''}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+                  background:var(--bg-0);border:1px solid var(--line);
+                  border-left:3px solid var(--teal-1);border-radius:4px;
+                  padding:7px 10px;font-size:13px;">
+        <span style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;flex:1;min-width:0;">
+          ${nameParts.join('')}
         </span>
-        <button type="button" class="pending-del" onclick="bnRemove(${i})" title="移除">✕</button>
+        <span style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+          ${nums.join('')}
+        </span>
+        <button type="button" onclick="bnRemove(${i})"
+          style="flex-shrink:0;width:22px;height:22px;border-radius:50%;
+                 background:rgba(255,45,85,0.12);border:1px solid var(--line);
+                 color:var(--text-mute);cursor:pointer;font-weight:900;font-size:11px;
+                 display:flex;align-items:center;justify-content:center;transition:all 0.15s;"
+          onmouseover="this.style.background='var(--urgent)';this.style.color='#fff';"
+          onmouseout="this.style.background='rgba(255,45,85,0.12)';this.style.color='var(--text-mute)';">✕</button>
       </div>`;
   }).join('');
 }

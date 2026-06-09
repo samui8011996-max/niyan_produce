@@ -1940,6 +1940,23 @@
   .modal .field input,
   .modal .field select,
   .modal .field textarea { width: 100%; min-width: 0; }
+  @media (max-width: 820px) {
+  #batch-action-btns {
+    flex-wrap: nowrap;
+  }
+  #batch-action-btns .btn-secondary {
+    white-space: nowrap;
+    padding: 12px 14px;
+  }
+  #batch-action-btns #batch-submit-btn {
+    flex: 1;
+    white-space: nowrap;
+    margin-right: 0;
+  }
+  #batch-action-btns .btn-secondary[onclick*="clearBatchContent"] {
+    margin-right: 0;
+  }
+}
 </style>
 </head>
 <body class="page-board-active">
@@ -2103,11 +2120,11 @@
     <input type="text" id="batch-filter" class="history-search-input" placeholder="篩選…（品項、款式、廠商）" oninput="renderBatchRows()" style="margin-bottom:12px;width:100%;">
     <div class="batch-rows" id="batch-rows"></div>
     <div class="batch-summary" id="batch-summary" style="margin-bottom:10px;"></div>
-    <div class="batch-actions" style="flex-wrap:wrap; gap:10px;">
-      <button type="button" class="btn btn-secondary" onclick="clearBatchContent()" style="margin-right:auto;">清除內容</button>
-      <button type="button" class="btn btn-secondary" onclick="toggleBatchPanel()">關閉</button>
-      <button type="button" class="btn btn-primary" id="batch-submit-btn" onclick="submitBatchAll()">一次送出</button>
-    </div>
+    <div class="batch-actions" id="batch-action-btns" style="flex-wrap:wrap; gap:10px;">
+  <button type="button" class="btn btn-secondary" onclick="clearBatchContent()" style="margin-right:auto;">清除內容</button>
+  <button type="button" class="btn btn-secondary" onclick="toggleBatchPanel()">關閉</button>
+  <button type="button" class="btn btn-primary" id="batch-submit-btn" onclick="submitBatchAll()">一次送出</button>
+</div>
   </div>
   <div class="cards" id="board-cards"><div class="empty">// 載入中…</div></div>
 </section>

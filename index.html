@@ -2077,11 +2077,11 @@
           <button type="button" class="btn btn-secondary" onclick="bnAddToList()">＋ 加入清單</button>
         </div>
       </div>
+      </div>
       <div id="bn-pending-wrap" style="display:none; padding:14px; border-top:1px dashed var(--line);">
         <label class="batch-new-pending-label">待建立 <span id="bn-pending-count" style="color:var(--teal-2);font-family:'Orbitron',sans-serif;">(0)</span></label>
         <div class="pending-list" id="bn-pending-list"></div>
       </div>
-    </div>
 
    <div class="batch-new" style="margin-bottom:14px;">
       <div class="batch-new-toggle" style="cursor:default; pointer-events:none;">
@@ -4366,7 +4366,7 @@ async function bnAddCustom(type) {
 
 function bnAddToList() {
   const orderDate = document.getElementById('batch-date').value;
-  const dueDate = state.bnDueNone ? '無' : document.getElementById('bn-dueDate').value;
+  const dueDate = '無';
   const quantity = Number(document.getElementById('bn-quantity').value) || 0;
   const note = document.getElementById('bn-note').value.trim();
   const initMake  = Number(document.getElementById('bn-init-make').value)  || 0;

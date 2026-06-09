@@ -2083,8 +2083,15 @@
       </div>
     </div>
 
-   <input type="text" id="batch-filter" class="history-search-input" placeholder="篩選…（品項、款式、廠商）" oninput="renderBatchRows()" style="margin-bottom:12px;width:100%;">
-    <div class="batch-rows" id="batch-rows"></div>
+   <div class="batch-new" style="margin-bottom:14px;">
+      <div class="batch-new-toggle" style="cursor:default; pointer-events:none;">
+        填寫進度
+      </div>
+      <div class="batch-new-box" style="display:block; padding:10px 12px; gap:10px;">
+        <input type="text" id="batch-filter" class="history-search-input" placeholder="篩選…（品項、款式、廠商）" oninput="renderBatchRows()" style="width:100%; margin-bottom:8px;">
+        <div class="batch-rows" id="batch-rows"></div>
+      </div>
+    </div>
     <div class="batch-summary" id="batch-summary" style="margin-bottom:10px;"></div>
     <div class="batch-shared" style="margin-bottom:12px;">
       <div class="batch-field" style="width:100%;">

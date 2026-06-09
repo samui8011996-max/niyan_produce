@@ -1998,7 +1998,7 @@
 
     <div class="batch-new">
       <div class="batch-new-toggle" onclick="toggleBatchNew()">
-        <span id="batch-new-icon">▸</span> 新增商品（可折疊・可加多筆・一次建立）
+        <span id="batch-new-icon">▸</span> 新增商品（可加多筆・一次建立）
       </div>
       <div class="batch-new-box" id="batch-new-box" style="display:none;">
         <div class="batch-new-grid">
@@ -2606,10 +2606,13 @@ function fmtDate(d) {
 }
 
 function toast(msg, type = '') {
+  const container = document.getElementById('toast-container');
+  // 不堆疊：每次先清掉舊的，只留最新一則
+  container.querySelectorAll('.toast').forEach(el => el.remove());
   const t = document.createElement('div');
   t.className = 'toast ' + type;
   t.textContent = msg;
-  document.getElementById('toast-container').appendChild(t);
+  container.appendChild(t);
   setTimeout(() => t.remove(), 3000);
 }
 

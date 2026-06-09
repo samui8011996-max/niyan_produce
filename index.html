@@ -2084,10 +2084,11 @@
       </div>
 
    <div class="batch-new" style="margin-bottom:14px;">
-      <div class="batch-new-toggle" style="cursor:default; pointer-events:none;">
-        填寫進度
+      <div class="batch-new-toggle" onclick="toggleBatchProgressSection()" id="batch-progress-toggle">
+        <span id="batch-progress-icon">▾</span> 填寫進度
+        <span id="batch-progress-summary" style="margin-left:auto; font-size:12px; letter-spacing:1px;"></span>
       </div>
-      <div class="batch-new-box" style="display:block; padding:10px 12px; gap:10px;">
+      <div class="batch-new-box" id="batch-progress-box" style="display:block; padding:10px 12px; gap:10px;">
         <input type="text" id="batch-filter" class="history-search-input" placeholder="篩選…（品項、款式、廠商）" oninput="renderBatchRows()" style="width:100%; margin-bottom:8px;">
         <div class="batch-rows" id="batch-rows"></div>
       </div>
@@ -4244,6 +4245,27 @@ async function submitBatchAll() {
   btn.textContent = orig;
 }
 /* ====== 批量面板內：新增商品（多筆 → 一次建立）====== */
+function toggleBatchProgressSection() {
+  const box = document.getElementById('batch-progress-box');
+  const icon = document.getElementById('batch-progress-icon');
+  if (!box) return;
+  const open = box.style.display !== 'none';
+  box.style.display = open ? 'none' : 'block';
+  if (icon) icon.textContent = open ? '▸' : '▾';
+}
+
+function updateBatchProgressSummary() {
+  const el = document.getElementById('batch-progress-summary');
+  if (!el) return;
+  let rows = 0, total = 0;
+  for (const oid in state.batchInput) {
+    const v = state.batchInput[oid];
+    const sum = (v.make || 0) + (v.grind || 0) + (v.wash || 0);
+    if (sum > 0) { rows++; total += sum; }
+  }
+  el.textContent = rows ? `已填 ${rows} 筆・${total} 件` : '';
+}
+
 function toggleBatchNew() {
   const box = document.getElementById('batch-new-box');
   const icon = document.getElementById('batch-new-icon');

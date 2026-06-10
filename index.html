@@ -4095,6 +4095,8 @@ function clearBatchContent() {
   if (!confirm('確定清空所有已填的進度數量？')) return;
   state.batchInput = {};
   state.batchActiveTarget = null;
+  const filledWrap = document.getElementById('batch-filled-list');
+  if (filledWrap) filledWrap.style.display = 'none';
   renderBatchRows();
   toast('已清除');
 }

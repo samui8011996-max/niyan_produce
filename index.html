@@ -2268,6 +2268,7 @@
             <th class="num">完成</th>
             <th class="num">研磨</th>
             <th class="num">清洗</th>
+            <th class="num">報廢</th>
             <th>完成日期</th>
           </tr>
         </thead>
@@ -2325,7 +2326,19 @@
       </div>
     </div>
 
-   
+    <div class="settings-card">
+      <h2>EXPORT · 匯出報表</h2>
+      <p class="desc">
+    
+      </p>
+
+   <p class="desc">
+        匯出 Excel 報表：品項統計、人員產能。<br>
+        下載前需輸入密碼。
+      </p>
+
+      <button type="button" class="btn btn-primary" onclick="exportExcelReport()" style="width:100%;">⬇ 下載 Excel 報表</button>
+    </div>
 
   </div>
 </section>
@@ -2389,6 +2402,7 @@
 
 </script>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 /* ================================================
    設定 - API_URL 從 localStorage 讀取
@@ -2918,7 +2932,7 @@ function renderHistory() {
   document.getElementById('history-count').textContent = `${filtered.length} ORDERS`;
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="13" class="empty-cell">// ${q ? '無符合的紀錄' : '尚無訂單'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="14" class="empty-cell">// ${q ? '無符合的紀錄' : '尚無訂單'}</td></tr>`;
     if (cardsWrap) cardsWrap.innerHTML = `<div class="empty-cell">// ${q ? '無符合的紀錄' : '尚無訂單'}</div>`;
     updateBatchBar();
     return;
@@ -2931,6 +2945,8 @@ function renderHistory() {
     const made = state.makeLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.quantity || 0), 0);
     const washed = state.washLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.quantity || 0), 0);
    const ground = state.grindLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.quantity || 0), 0);
+    const scrap = [...state.makeLogs, ...state.grindLogs, ...state.washLogs]
+      .filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.scrap || 0), 0);
     // 已完成 = 手動標記
     const isDone = o.done === true;
     let doneDate = '';
@@ -2950,13 +2966,13 @@ let status = '進行中', statusKey = 'is-ongoing';
 if (isLocalHidden) { status = '已隱藏'; statusKey = 'is-hidden'; }
     else if (isDone) { status = '已完成'; statusKey = 'is-done'; }
     else if (o.urgent) { status = '急單'; statusKey = 'is-urgent'; }
-    return { o, made, ground, washed, isDone, doneDate, status, statusKey, isLocalHidden };
+    return { o, made, ground, washed, scrap, isDone, doneDate, status, statusKey, isLocalHidden };
     
   });
 
   // ===== 表格版（桌面） =====
   tbody.innerHTML =// 修正後
-enriched.map(({ o, made, ground, washed, isDone, doneDate, status, statusKey, isLocalHidden }) => {
+enriched.map(({ o, made, ground, washed, scrap, isDone, doneDate, status, statusKey, isLocalHidden }) => {
     const classes = [
       statusKey,
       state._selectedHistoryIds.has(o.id) ? 'selected' : ''
@@ -2987,6 +3003,7 @@ enriched.map(({ o, made, ground, washed, isDone, doneDate, status, statusKey, is
         <td class="num">${made}</td>
         <td class="num">${ground}</td>
         <td class="num">${washed}</td>
+        <td class="num" style="color:${scrap > 0 ? 'var(--urgent)' : 'inherit'}">${scrap || '-'}</td>
         <td>${doneDate || '-'}</td>
       </tr>
     `;
@@ -2995,7 +3012,7 @@ enriched.map(({ o, made, ground, washed, isDone, doneDate, status, statusKey, is
   // ===== 卡片版（手機） =====
   // ===== 緊湊列表版（手機） =====
   if (cardsWrap) {
-   const rows = enriched.map(({ o, made, ground, washed, doneDate, status, statusKey, isLocalHidden }) => {
+   const rows = enriched.map(({ o, made, ground, washed, scrap, doneDate, status, statusKey, isLocalHidden }) => {
       const selected = state._selectedHistoryIds.has(o.id);
       const checked = selected ? 'checked' : '';
       const dot = o.color && COLOR_HEX[o.color]
@@ -3012,7 +3029,7 @@ enriched.map(({ o, made, ground, washed, isDone, doneDate, status, statusKey, is
             <div class="hl-name">${escapeHtml(o.item || '-')}${o.style ? ` <span class="hl-style">${escapeHtml(o.style)}</span>` : ''}</div>
             <div class="hl-sub">
               ${colorSize}
-              <span class="hl-nums">訂<span class="v">${o.quantity}</span> 製<span class="v">${made}</span> 磨<span class="v">${ground}</span> 洗<span class="v">${washed}</span></span>
+              <span class="hl-nums">訂<span class="v">${o.quantity}</span> 製<span class="v">${made}</span> 磨<span class="v">${ground}</span> 洗<span class="v">${washed}</span>${scrap > 0 ? ` 廢<span class="v" style="color:var(--urgent)">${scrap}</span>` : ''}</span>
             </div>
           </div>
           <div class="hl-right">
@@ -4679,8 +4696,74 @@ function renderSettingsPage() {
       volValue.textContent = volSlider.value + '%';
     };
   }
+
+  }
+
+
+/* ================================================
+   匯出 Excel 報表（需密碼，預設 8888）
+================================================ */
+const EXPORT_PWD = '8888';   // 下載密碼（寫死，不可於前台變更）
+
+function exportExcelReport() {
+  if (typeof XLSX === 'undefined') return toast('Excel 元件尚未載入，請檢查網路後重試', 'error');
+  const input = prompt('請輸入下載密碼：');
+  if (input === null) return;
+  if (input.trim() !== EXPORT_PWD) return toast('密碼錯誤', 'error');
+  try { buildAndDownloadWorkbook(); }
+  catch (err) { toast('匯出失敗：' + err.message, 'error'); }
 }
 
+function buildAndDownloadWorkbook() {
+  const orders = state._allOrders || state.orders || [];
+  const makeLogs = state.makeLogs || [], grindLogs = state.grindLogs || [], washLogs = state.washLogs || [];
+  const wb = XLSX.utils.book_new();
+  const sheet = (rows, name) =>
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ '（無資料）': '' }]), name);
+
+  // 1. 品項統計
+  const iAgg = {};
+  orders.forEach(o => {
+    const k = o.item || '（未填）';
+    if (!iAgg[k]) iAgg[k] = { 訂單筆數: 0, 訂購總量: 0, 已製造: 0, 已研磨: 0, 已清洗: 0, 報廢: 0 };
+    const { made, ground, washed, scrap } = getOrderProgress(o.id);
+    iAgg[k].訂單筆數++; iAgg[k].訂購總量 += Number(o.quantity || 0);
+    iAgg[k].已製造 += made; iAgg[k].已研磨 += ground; iAgg[k].已清洗 += washed; iAgg[k].報廢 += scrap;
+  });
+  sheet(Object.keys(iAgg).map(k => {
+    const a = iAgg[k];
+    return { '品項': k, ...a, '報廢率(%)': a.已製造 > 0 ? Math.round(a.報廢 / a.已製造 * 100) : 0 };
+  }).sort((a, b) => b.訂購總量 - a.訂購總量), '品項統計');
+
+  // 2. 人員產能（平均每日＝只算有登記的工作日）
+  const pAgg = {};
+  const addP = (person, stage, date, qty, scrap) => {
+    const k = person || '（未填）';
+    if (!pAgg[k]) pAgg[k] = { 製造: 0, 研磨: 0, 清洗: 0, 報廢: 0, _days: new Set() };
+    pAgg[k][stage] += Number(qty || 0);
+    pAgg[k].報廢 += Number(scrap || 0);
+    const d = fmtDate(date);
+    if (d) pAgg[k]._days.add(d);   // 同一天多筆只算一個工作日
+  };
+  makeLogs.forEach(l => addP(l.person, '製造', l.date, l.quantity, l.scrap));
+  grindLogs.forEach(l => addP(l.person, '研磨', l.date, l.quantity, l.scrap));
+  washLogs.forEach(l => addP(l.person, '清洗', l.date, l.quantity, l.scrap));
+  sheet(Object.keys(pAgg).map(k => {
+    const a = pAgg[k];
+    const total = a.製造 + a.研磨 + a.清洗;
+    const days = a._days.size;
+    return {
+      '人員': k,
+      '製造': a.製造, '研磨': a.研磨, '清洗': a.清洗, '報廢': a.報廢,
+      '總處理量': total,
+      '工作天數': days,
+      '平均每日產量': days > 0 ? Math.round(total / days * 10) / 10 : 0,
+    };
+  }).sort((a, b) => b.總處理量 - a.總處理量), '人員產能');
+
+  XLSX.writeFile(wb, `泥研製所_製造報表_${today().replace(/-/g, '')}.xlsx`);
+  toast('報表已下載');
+}
 
 async function testAndSaveApi() {
   const input = document.getElementById('s-api-url');

@@ -2363,6 +2363,10 @@
         <input type="number" id="m-quantity" min="1" required placeholder="本次完成數量" inputmode="numeric">
       
       </div>
+      <div class="field">
+        <label id="modal-scrap-label" style="color:var(--urgent); letter-spacing:2px;">本次報廢（選填）</label>
+        <input type="number" id="m-scrap" min="0" placeholder="0" inputmode="numeric">
+      </div>
       <div class="field full">
         <label id="modal-person-label">製作師傅</label>
         <div class="chip-group" id="person-chips"></div>
@@ -2728,7 +2732,10 @@ function getOrderProgress(orderId) {
   const made = state.makeLogs.filter(l => l.orderId === orderId).reduce((s, l) => s + Number(l.quantity || 0), 0);
   const ground = state.grindLogs.filter(l => l.orderId === orderId).reduce((s, l) => s + Number(l.quantity || 0), 0);
   const washed = state.washLogs.filter(l => l.orderId === orderId).reduce((s, l) => s + Number(l.quantity || 0), 0);
-  return { made, ground, washed };
+  const scrap = [...state.makeLogs, ...state.grindLogs, ...state.washLogs]
+    .filter(l => l.orderId === orderId)
+    .reduce((s, l) => s + Number(l.scrap || 0), 0);
+  return { made, ground, washed, scrap };
 }
 
 /* ====== 本地「最近處理」排序（不與試算表共享，只存這台裝置） ======
@@ -3105,7 +3112,7 @@ async function purgeSelectedOrders() {
 }
 
 function renderCard(o, pos = {}) {
-  const { made, ground, washed } = getOrderProgress(o.id);
+  const { made, ground, washed, scrap } = getOrderProgress(o.id);
   const done = o.done === true;
   const sizeText = o.size;
   const dueText = o.dueDate === '無' || !o.dueDate ? '無交期' : fmtDate(o.dueDate);
@@ -3149,13 +3156,14 @@ function renderCard(o, pos = {}) {
 
      <div class="card-qty-block">
         <div class="qty-block-main">
-          <span class="total">${o.quantity}</span><span class="slash">/</span><span class="made">${made}</span><span class="slash">/</span><span class="ground">${ground}</span><span class="slash">/</span><span class="washed">${washed}</span>
+          <span class="total">${o.quantity}</span><span class="slash">/</span><span class="made">${made}</span><span class="slash">/</span><span class="ground">${ground}</span><span class="slash">/</span><span class="washed">${washed}</span>${scrap > 0 ? `<span class="slash">/</span><span class="scrap" style="color:var(--urgent)">${scrap}</span>` : ''}
         </div>
         <div class="qty-block-legend">
           <span class="seg"><span class="dot t"></span>訂單</span>
           <span class="seg"><span class="dot m"></span>製造</span>
           <span class="seg"><span class="dot g"></span>研磨</span>
           <span class="seg"><span class="dot w"></span>清洗</span>
+          ${scrap > 0 ? `<span class="seg"><span class="dot" style="background:var(--urgent)"></span>報廢</span>` : ''}
         </div>
         ${done ? '<div class="qty-block-sub"><span class="done-badge">已完成</span></div>' : ''}
       </div>
@@ -3690,6 +3698,8 @@ function openModal(orderId) {
   document.getElementById('m-person-other').value = '';
   document.getElementById('m-person-other').style.display = 'none';
   document.getElementById('m-quantity').value = '';
+  const mScrap = document.getElementById('m-scrap');
+  if (mScrap) mScrap.value = '';
   document.getElementById('m-append-qty').value = o.quantity;   // ← 新增
   updateModalDoneBtn();
   document.getElementById('modal').classList.add('show');
@@ -3794,11 +3804,16 @@ function renderModalProgress() {
   const appendCur = document.getElementById('m-append-current');
   if (appendCur) appendCur.textContent = `目前 ${o.quantity} 件`;
   const { made, ground, washed } = getOrderProgress(o.id);
+  const scrapMake  = state.makeLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.scrap || 0), 0);
+  const scrapGrind = state.grindLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.scrap || 0), 0);
+  const scrapWash  = state.washLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.scrap || 0), 0);
+  const scrapTotal = scrapMake + scrapGrind + scrapWash;
   document.getElementById('modal-progress').innerHTML = `
     訂單總數：<span>${o.quantity}</span> 件<br>
     已製造：<span>${made}</span> 件　|　待製造：<span>${Math.max(0, o.quantity - made)}</span> 件<br>
     已研磨：<span>${ground}</span> 件　|　待研磨：<span>${Math.max(0, made - ground)}</span> 件<br>
     已清洗：<span>${washed}</span> 件　|　待清洗：<span>${Math.max(0, ground - washed)}</span> 件
+    ${scrapTotal > 0 ? `<br><span style="color:var(--urgent)">報廢：製${scrapMake} / 磨${scrapGrind} / 洗${scrapWash}（共 ${scrapTotal} 件）</span>` : ''}
   `;
 
   const logsSrc = { make: state.makeLogs, grind: state.grindLogs, wash: state.washLogs }[state.modalTab] || [];
@@ -3812,7 +3827,7 @@ function renderModalProgress() {
     list.innerHTML = sorted.map(l => `
       <div class="log-row">
         <span>${fmtDate(l.date)} · ${escapeHtml(l.person || '')}</span>
-        <span class="qty">+${l.quantity}</span>
+        <span class="qty">+${l.quantity}${(l.scrap > 0) ? ` <span style="color:var(--urgent)">廢${l.scrap}</span>` : ''}</span>
         <button class="del-log-btn" onclick="deleteLog('${action}','${l.id}')" title="刪除此筆">✕</button>
       </div>
     `).join('');
@@ -3830,6 +3845,9 @@ function switchTab(tab) {
     { make: '製作師傅', grind: '研磨人員', wash: '清洗人員' }[tab];
   document.getElementById('modal-qty-label').textContent =
     { make: '本次完成數量', grind: '本次研磨數量', wash: '本次清洗數量' }[tab];
+  const scrapLabel = document.getElementById('modal-scrap-label');
+  if (scrapLabel) scrapLabel.textContent =
+    { make: '製造報廢（選填）', grind: '研磨報廢（選填）', wash: '清洗報廢（選填）' }[tab];
   renderModalProgress();
 }
 
@@ -3864,7 +3882,8 @@ async function submitProgress() {
   if (btn.disabled) return;
 
   const date = document.getElementById('m-date').value;
-  const quantity = Number(document.getElementById('m-quantity').value);
+  const quantity = Number(document.getElementById('m-quantity').value) || 0;
+  const scrap = Number(document.getElementById('m-scrap').value) || 0;
 
   let person = state.selectedPerson;
   if (person === '其他') {
@@ -3874,7 +3893,7 @@ async function submitProgress() {
   if (!date) return toast('請選擇日期', 'error');
   if (!state.selectedPerson) return toast('請選擇人員', 'error');
   if (state.selectedPerson === '其他' && !person) return toast('請填入其他人員姓名', 'error');
-  if (!quantity || quantity < 1) return toast('數量必須大於 0', 'error');
+  if (quantity < 1 && scrap < 1) return toast('完成或報廢數量至少填一個', 'error');
 
   const action = { make: 'addMakeLog', grind: 'addGrindLog', wash: 'addWashLog' }[state.modalTab];
   const label = { make: '製造紀錄', grind: '研磨紀錄', wash: '清洗紀錄' }[state.modalTab];
@@ -3883,12 +3902,13 @@ async function submitProgress() {
   btn.textContent = '記錄中...';
 
   try {
-    await api(action, { orderId, date, person, quantity });
+    await api(action, { orderId, date, person, quantity, scrap });
     markTouched(orderId);          // 本地置頂：這筆剛被處理
-    toast(`${label}已記錄：${person} +${quantity}`);
+    toast(`${label}已記錄：${person}${quantity ? ' +' + quantity : ''}${scrap ? ' 報廢' + scrap : ''}`);
     await loadAll();
     renderModalProgress();
     document.getElementById('m-quantity').value = '';
+    document.getElementById('m-scrap').value = '';
   } catch (err) {
     toast('儲存失敗：' + err.message, 'error');
   } finally {
@@ -3998,8 +4018,12 @@ function selectBatchPerson(name) {
 }
 
 function batchRowInput(oid, field, val) {
-  if (!state.batchInput[oid]) state.batchInput[oid] = { make: 0, grind: 0, wash: 0 };
-  state.batchInput[oid][field] = Number(val) || 0;
+  if (!state.batchInput[oid]) state.batchInput[oid] = { make: 0, grind: 0, wash: 0, scrap: 0, scrapStage: 'make' };
+  if (field === 'scrapStage') {
+    state.batchInput[oid].scrapStage = val || 'make';
+  } else {
+    state.batchInput[oid][field] = Number(val) || 0;
+  }
   updateBatchSummary();
   renderBatchFilledList();
 }
@@ -4033,13 +4057,16 @@ function batchClearActive() {
 function updateBatchSummary() {
   const el = document.getElementById('batch-summary');
   if (!el) return;
-  let rows = 0, total = 0;
+  let rows = 0, total = 0, scrapTotal = 0;
   for (const oid in state.batchInput) {
     const v = state.batchInput[oid];
     const sum = (v.make || 0) + (v.grind || 0) + (v.wash || 0);
-    if (sum > 0) { rows++; total += sum; }
+    const sc = (v.scrap || 0);
+    if (sum > 0 || sc > 0) { rows++; total += sum; scrapTotal += sc; }
   }
-  el.textContent = rows ? `已填 ${rows} 筆 · 共 ${total} 件` : '尚未填寫';
+  el.textContent = rows
+    ? `已填 ${rows} 筆 · 共 ${total} 件${scrapTotal > 0 ? ` · 報廢 ${scrapTotal} 件` : ''}`
+    : '尚未填寫';
 }
 function renderBatchFilledList() {
   const wrap = document.getElementById('batch-filled-list');
@@ -4049,7 +4076,7 @@ function renderBatchFilledList() {
   const entries = [];
   for (const oid in state.batchInput) {
     const v = state.batchInput[oid];
-    const sum = (v.make || 0) + (v.grind || 0) + (v.wash || 0);
+    const sum = (v.make || 0) + (v.grind || 0) + (v.wash || 0) + (v.scrap || 0);
     if (sum === 0) continue;
     const o = (state._allOrders || state.orders).find(x => x.id === oid);
     if (!o) continue;
@@ -4067,6 +4094,7 @@ function renderBatchFilledList() {
     if (v.make  > 0) nums.push(`<span style="color:var(--teal-2);font-family:'Orbitron',sans-serif;font-weight:700;">製+${v.make}</span>`);
     if (v.grind > 0) nums.push(`<span style="color:var(--ground);font-family:'Orbitron',sans-serif;font-weight:700;">磨+${v.grind}</span>`);
     if (v.wash  > 0) nums.push(`<span style="color:var(--warn);font-family:'Orbitron',sans-serif;font-weight:700;">洗+${v.wash}</span>`);
+    if (v.scrap > 0) nums.push(`<span style="color:var(--urgent);font-family:'Orbitron',sans-serif;font-weight:700;">廢+${v.scrap}(${ {make:'製',grind:'磨',wash:'洗'}[v.scrapStage || 'make'] })</span>`);
 
     entries.push(`
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;
@@ -4090,7 +4118,7 @@ function renderBatchFilledList() {
   }
 }
 function clearBatchContent() {
-  const has = Object.values(state.batchInput).some(v => (v.make || 0) + (v.grind || 0) + (v.wash || 0) > 0);
+  const has = Object.values(state.batchInput).some(v => (v.make || 0) + (v.grind || 0) + (v.wash || 0) + (v.scrap || 0) > 0);
   if (!has) return toast('沒有已填的內容可清除');
   if (!confirm('確定清空所有已填的進度數量？')) return;
   state.batchInput = {};
@@ -4100,6 +4128,14 @@ function clearBatchContent() {
   renderBatchRows();
   toast('已清除');
 }
+if (state.batchScrapOpen === undefined) state.batchScrapOpen = new Set();
+function toggleBatchScrap(oid) {
+  if (!state.batchScrapOpen) state.batchScrapOpen = new Set();
+  if (state.batchScrapOpen.has(oid)) state.batchScrapOpen.delete(oid);
+  else state.batchScrapOpen.add(oid);
+  renderBatchRows();
+}
+
 function renderBatchRows() {
   const wrap = document.getElementById('batch-rows');
   if (!wrap) return;
@@ -4129,6 +4165,7 @@ function renderBatchRows() {
   wrap.innerHTML = active.map(o => {
     const { made, ground, washed } = getOrderProgress(o.id);
     const v = state.batchInput[o.id] || {};
+    const scrapOpen = (state.batchScrapOpen && state.batchScrapOpen.has(o.id)) || (v.scrap || 0) > 0;
     const isHidden = hiddenSet.has(o.id);
    const dot = (o.color && COLOR_HEX[o.color])
       ? `<span class="hl-dot" style="background:${COLOR_HEX[o.color]};width:11px;height:11px;border-radius:50%;display:inline-block;border:1px solid rgba(255,255,255,0.2);margin-right:3px;vertical-align:middle;"></span>` : '';
@@ -4143,10 +4180,21 @@ function renderBatchRows() {
           <div class="batch-row-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${bits.join('')}${o.urgent ? '<span class="pending-urgent">急</span>' : ''}</div>
           <div class="batch-row-meta">${o.vendor ? escapeHtml(o.vendor) + ' · ' : ''}訂<b>${o.quantity}</b> 製<b>${made}</b> 磨<b>${ground}</b> 洗<b>${washed}</b></div>
         </div>
-        <div class="batch-row-inputs" style="display:flex;gap:6px;align-items:flex-end;flex-shrink:0;">
-          <label class="bi make" style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--teal-2);">製<input type="number" min="0" inputmode="numeric" value="${v.make || ''}" onfocus="batchSetTarget('${o.id}','make')" oninput="batchRowInput('${o.id}','make',this.value)" placeholder="0"></label>
-          <label class="bi grind" style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--ground);">磨<input type="number" min="0" inputmode="numeric" value="${v.grind || ''}" onfocus="batchSetTarget('${o.id}','grind')" oninput="batchRowInput('${o.id}','grind',this.value)" placeholder="0"></label>
-          <label class="bi wash" style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--warn);">洗<input type="number" min="0" inputmode="numeric" value="${v.wash || ''}" onfocus="batchSetTarget('${o.id}','wash')" oninput="batchRowInput('${o.id}','wash',this.value)" placeholder="0"></label>
+        <div class="batch-row-inputs" style="display:flex;flex-direction:column;gap:6px;align-items:stretch;flex-shrink:0;">
+          <div style="display:flex;gap:6px;align-items:flex-end;justify-content:flex-end;">
+            <label class="bi make" style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--teal-2);">製<input type="number" min="0" inputmode="numeric" value="${v.make || ''}" onfocus="batchSetTarget('${o.id}','make')" oninput="batchRowInput('${o.id}','make',this.value)" placeholder="0"></label>
+            <label class="bi grind" style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--ground);">磨<input type="number" min="0" inputmode="numeric" value="${v.grind || ''}" onfocus="batchSetTarget('${o.id}','grind')" oninput="batchRowInput('${o.id}','grind',this.value)" placeholder="0"></label>
+            <label class="bi wash" style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--warn);">洗<input type="number" min="0" inputmode="numeric" value="${v.wash || ''}" onfocus="batchSetTarget('${o.id}','wash')" oninput="batchRowInput('${o.id}','wash',this.value)" placeholder="0"></label>
+            <button type="button" onclick="toggleBatchScrap('${o.id}')" title="報廢" style="background:rgba(255,45,85,0.08);border:1px solid var(--line);color:var(--urgent);border-radius:4px;padding:7px 8px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;height:fit-content;align-self:flex-end;">廢${scrapOpen ? '▾' : '▸'}${(v.scrap || 0) > 0 ? ` ${v.scrap}` : ''}</button>
+          </div>
+          ${scrapOpen ? `<div style="display:flex;gap:6px;align-items:flex-end;justify-content:flex-end;">
+            <label class="bi scrap" style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--urgent);">報廢<input type="number" min="0" inputmode="numeric" value="${v.scrap || ''}" onfocus="batchSetTarget('${o.id}','scrap')" oninput="batchRowInput('${o.id}','scrap',this.value)" placeholder="0"></label>
+            <label class="bi" style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--urgent);">計入<select onchange="batchRowInput('${o.id}','scrapStage',this.value)" style="background:var(--bg-1);border:1px solid var(--line);color:var(--text);padding:7px 4px;font-size:13px;border-radius:4px;outline:none;width:64px;">
+              <option value="make" ${(v.scrapStage || 'make') === 'make' ? 'selected' : ''}>製造</option>
+              <option value="grind" ${v.scrapStage === 'grind' ? 'selected' : ''}>研磨</option>
+              <option value="wash" ${v.scrapStage === 'wash' ? 'selected' : ''}>清洗</option>
+            </select></label>
+          </div>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -4231,13 +4279,20 @@ async function submitBatchAll() {
   let person = state.batchPerson;
   if (person === '其他') person = document.getElementById('batch-person-other').value.trim();
 
-  // 既有訂單的進度
+  // 既有訂單的進度（報廢數量併入所選階段）
   const progJobs = [];
+  const STAGE_ACTION = { make: 'addMakeLog', grind: 'addGrindLog', wash: 'addWashLog' };
   for (const oid in state.batchInput) {
     const v = state.batchInput[oid];
-    if ((v.make  || 0) > 0) progJobs.push({ action: 'addMakeLog',  orderId: oid, quantity: v.make });
-    if ((v.grind || 0) > 0) progJobs.push({ action: 'addGrindLog', orderId: oid, quantity: v.grind });
-    if ((v.wash  || 0) > 0) progJobs.push({ action: 'addWashLog',  orderId: oid, quantity: v.wash });
+    const scrap = v.scrap || 0;
+    const scrapStage = v.scrapStage || 'make';
+    ['make', 'grind', 'wash'].forEach(stage => {
+      const qty = v[stage] || 0;
+      const sc = (stage === scrapStage) ? scrap : 0;
+      if (qty > 0 || sc > 0) {
+        progJobs.push({ action: STAGE_ACTION[stage], orderId: oid, quantity: qty, scrap: sc });
+      }
+    });
   }
 
   const newOrders = state.bnPending;
@@ -4288,7 +4343,7 @@ async function submitBatchAll() {
     const j = progJobs[i];
     btn.textContent = `上傳進度 ${i + 1}/${progJobs.length}...`;
     try {
-      await api(j.action, { orderId: j.orderId, date, person, quantity: j.quantity });
+      await api(j.action, { orderId: j.orderId, date, person, quantity: j.quantity, scrap: j.scrap || 0 });
       touched.add(j.orderId);
       okProg++;
     } catch (err) {
@@ -4304,8 +4359,9 @@ async function submitBatchAll() {
     const keep = {};
     const fmap = { addMakeLog: 'make', addGrindLog: 'grind', addWashLog: 'wash' };
     failProg.forEach(j => {
-      if (!keep[j.orderId]) keep[j.orderId] = { make: 0, grind: 0, wash: 0 };
+      if (!keep[j.orderId]) keep[j.orderId] = { make: 0, grind: 0, wash: 0, scrap: 0, scrapStage: 'make' };
       keep[j.orderId][fmap[j.action]] = j.quantity;
+      if (j.scrap > 0) { keep[j.orderId].scrap = j.scrap; keep[j.orderId].scrapStage = fmap[j.action]; }
     });
     state.batchInput = keep;
   }

@@ -2410,9 +2410,9 @@
 ================================================ */
 const API_URL_KEY = 'niyan_api_url';
 const SHEET_URL_KEY = 'niyan_sheet_url';
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbx87A7YsirnHnZCq0vijBpUaxvHC02aOnxWLEviC2D5vb4icV9exH3WSwBU-lNOjuDqtQ/exec';
 function getApiUrl() {
-  try { return localStorage.getItem(API_URL_KEY) || ''; }
-  catch { return ''; }
+  return DEFAULT_API_URL;
 }
 function setApiUrl(url) {
   try { localStorage.setItem(API_URL_KEY, url || ''); } catch {}

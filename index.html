@@ -48,7 +48,38 @@
     color: var(--teal-2); font-weight: 700;
     margin-bottom: 10px;
   }
+  .qty-append-current {
+    margin-left: 10px;
+    color: var(--teal-2);
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    letter-spacing: 1px;
+  }
+  .qty-append-current .arrow { color: var(--text-mute); margin: 0 6px; font-weight: 900; }
+  .qty-append-current .new-total { color: var(--done); text-shadow: 0 0 8px var(--done-glow); }
   .qty-append-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  .qty-append-log {
+    margin-top: 6px;
+    max-height: 160px;
+    overflow-y: auto;
+    border-top: 1px dashed var(--line);
+    padding-top: 8px;
+  }
+  .qty-append-log .append-log-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 2px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    border-bottom: 1px dashed rgba(0, 212, 200, 0.08);
+  }
+  .qty-append-log .append-log-row .amt { color: var(--teal-2); font-weight: 700; }
+  .qty-append-log .append-log-empty {
+    font-size: 12px;
+    color: var(--text-mute);
+    padding: 4px 2px;
+  }
   .qty-append-row input[type=number] {
     flex: 1 1 0;
     min-width: 0;          /* 讓輸入框可被壓縮，按鈕才不會被擠出邊界 */
@@ -1292,6 +1323,19 @@
     border-radius: 6px;
     overflow-x: auto;
   }
+  .history-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 18px;
+  }
+  .history-pagination .history-page-info {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
   .history-table {
     width: 100%;
     border-collapse: collapse;
@@ -2243,7 +2287,7 @@
         HISTORY · 歷史紀錄
         <span class="count" id="history-count">0 ORDERS</span>
       </div>
-      <input type="text" id="history-search" placeholder="搜尋…（廠商、品項、款式）" class="history-search-input" oninput="renderHistory()">
+      <input type="text" id="history-search" placeholder="搜尋…（廠商、品項、款式）" class="history-search-input" oninput="state._historyPage = 0; renderHistory()">
     </div>
 
     <div class="history-batch-bar" id="history-batch-bar">
@@ -2278,6 +2322,8 @@
 
     <!-- 手機版卡片式列表 -->
     <div class="history-cards" id="history-cards"></div>
+
+    <div class="history-pagination" id="history-pagination"></div>
   </div>
 </section>
 
@@ -2353,12 +2399,12 @@
 
     <div class="progress-display" id="modal-progress"></div>
 <div class="qty-append-box">
-      <div class="qty-append-label">修改訂單總數量<span id="m-append-current" style="margin-left:10px;color:var(--teal-2);font-family:'Orbitron',sans-serif;font-weight:700;letter-spacing:1px;">目前 — 件</span></div>
+      <div class="qty-append-label">修改訂單總數量<span id="m-append-current" class="qty-append-current">目前 — 件</span></div>
       <div class="qty-append-row">
-        <input type="number" id="m-append-qty" min="1" placeholder="輸入新的總數量" inputmode="numeric">
+        <input type="number" id="m-append-qty" min="1" placeholder="輸入追加數量" inputmode="numeric" oninput="updateAppendPreview()">
         <button type="button" class="btn btn-primary qty-append-btn" onclick="submitAppendQty()">追加</button>
       </div>
-      
+      <div class="qty-append-log" id="qty-append-log"></div>
     </div>
    <div class="tab-row">
       <button class="active" id="tab-make" onclick="switchTab('make')">製造完成</button>
@@ -2944,9 +2990,19 @@ function renderHistory() {
 
   document.getElementById('history-count').textContent = `${filtered.length} ORDERS`;
 
+  // 分頁：每頁 20 筆
+  const HISTORY_PAGE_SIZE = 20;
+  if (state._historyPage === undefined || state._historyPage === null) state._historyPage = 0;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / HISTORY_PAGE_SIZE));
+  if (state._historyPage >= totalPages) state._historyPage = totalPages - 1;
+  if (state._historyPage < 0) state._historyPage = 0;
+  const pageStart = state._historyPage * HISTORY_PAGE_SIZE;
+  const pageItems = filtered.slice(pageStart, pageStart + HISTORY_PAGE_SIZE);
+
   if (filtered.length === 0) {
     tbody.innerHTML = `<tr><td colspan="14" class="empty-cell">// ${q ? '無符合的紀錄' : '尚無訂單'}</td></tr>`;
     if (cardsWrap) cardsWrap.innerHTML = `<div class="empty-cell">// ${q ? '無符合的紀錄' : '尚無訂單'}</div>`;
+    renderHistoryPagination(totalPages);
     updateBatchBar();
     return;
   }
@@ -2954,7 +3010,7 @@ function renderHistory() {
   // 為每筆訂單預先計算狀態
  // 為每筆訂單預先計算狀態
   const doneDateMap = getDoneDateMap();
-  const enriched = filtered.map(o => {
+  const enriched = pageItems.map(o => {
     const made = state.makeLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.quantity || 0), 0);
     const washed = state.washLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.quantity || 0), 0);
    const ground = state.grindLogs.filter(l => l.orderId === o.id).reduce((s, l) => s + Number(l.quantity || 0), 0);
@@ -3067,7 +3123,25 @@ enriched.map(({ o, made, ground, washed, scrap, isDone, doneDate, status, status
     allChk.checked = allSelected;
   }
 
+  renderHistoryPagination(totalPages);
   updateBatchBar();
+}
+
+function renderHistoryPagination(totalPages) {
+  const el = document.getElementById('history-pagination');
+  if (!el) return;
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+  const page = state._historyPage || 0;
+  el.innerHTML = `
+    <button type="button" class="btn btn-secondary" ${page <= 0 ? 'disabled' : ''} onclick="goHistoryPage(${page - 1})">上一頁</button>
+    <span class="history-page-info">第 ${page + 1} / ${totalPages} 頁</span>
+    <button type="button" class="btn btn-secondary" ${page >= totalPages - 1 ? 'disabled' : ''} onclick="goHistoryPage(${page + 1})">下一頁</button>
+  `;
+}
+
+function goHistoryPage(p) {
+  state._historyPage = p;
+  renderHistory();
 }
 
 function toggleHistorySelect(id, checked) {
@@ -3730,7 +3804,9 @@ function openModal(orderId) {
   document.getElementById('m-quantity').value = '';
   const mScrap = document.getElementById('m-scrap');
   if (mScrap) mScrap.value = '';
-  document.getElementById('m-append-qty').value = o.quantity;   // ← 新增
+  document.getElementById('m-append-qty').value = '';
+  updateAppendPreview();
+  renderAppendLog(orderId);
   updateModalDoneBtn();
   document.getElementById('modal').classList.add('show');
 }
@@ -3773,18 +3849,16 @@ async function submitAppendQty() {
   const orderId = state.currentOrderId;
   if (!orderId) return;
 
-  const o = state.orders.find(x => x.id === orderId);
+  const o = state.orders.find(x => x.id === orderId) || (state._allOrders || []).find(x => x.id === orderId);
   if (!o) return;
 
   const input = document.getElementById('m-append-qty');
-  const newTotal = Number(input.value);
-  if (input.value === '' || isNaN(newTotal) || newTotal < 1) {
-    return toast('請輸入新的總數量（至少 1）', 'error');
+  const delta = Number(input.value);
+  if (input.value === '' || isNaN(delta) || delta < 1) {
+    return toast('請輸入追加數量（至少 1）', 'error');
   }
 
   const current = Number(o.quantity) || 0;
-  const delta = newTotal - current;            // 算出跟目前差多少
-  if (delta === 0) return toast('總數量未變更');
 
   const btn = document.querySelector('.qty-append-btn');
   if (btn && btn.disabled) return;
@@ -3792,21 +3866,82 @@ async function submitAppendQty() {
 
   try {
     const res = await api('addOrderQty', { id: orderId, delta });
-    const newQty = (res && res.quantity != null) ? res.quantity : newTotal;
+    const newQty = (res && res.quantity != null) ? res.quantity : (current + delta);
     o.quantity = newQty;
     const ao = (state._allOrders || []).find(x => x.id === orderId);
     if (ao) ao.quantity = newQty;
-    input.value = newQty;                      // 欄位顯示更新後的總數
-    toast(`訂單總數量已改為 ${newQty} 件`);
+    input.value = '';                      // 清空，方便下次繼續輸入追加量
+    addAppendLogEntry(orderId, delta, current, newQty);
+    toast(`已追加 ${delta} 件，總數量變為 ${newQty} 件`);
+
+    // 若該訂單原本已被本機隱藏（打叉），追加後重新顯示並置頂
+    const hidden = getLocalHidden();
+    if (hidden.has(orderId)) {
+      hidden.delete(orderId);
+      saveLocalHidden(hidden);
+      applyLocalHidden();
+    }
+    markTouched(orderId);
+
     renderModalSub();
     renderModalProgress();
+    renderAppendLog(orderId);
+    updateAppendPreview();
     renderBoard();
     renderHistory();
   } catch (err) {
     toast('修改失敗：' + err.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '修改'; }
+    if (btn) { btn.disabled = false; btn.textContent = '追加'; }
   }
+}
+
+// 追加數量的即時運算：直接顯示在「目前 — 件」那一行
+function updateAppendPreview() {
+  const el = document.getElementById('m-append-current');
+  if (!el) return;
+  const o = state.orders.find(x => x.id === state.currentOrderId) || (state._allOrders || []).find(x => x.id === state.currentOrderId);
+  if (!o) { el.textContent = '目前 — 件'; return; }
+  const current = Number(o.quantity) || 0;
+  const input = document.getElementById('m-append-qty');
+  if (!input || input.value === '' || isNaN(Number(input.value))) {
+    el.textContent = `目前 ${current} 件`;
+    return;
+  }
+  const delta = Number(input.value);
+  el.innerHTML = `目前 ${current} 件 <span class="arrow">→</span> <span class="new-total">${current + delta}</span> 件`;
+}
+
+/* ====== 追加紀錄（本地紀錄，不同步，只存這台裝置） ====== */
+const APPEND_LOG_KEY = 'niyan_append_logs';
+function getAppendLogs() {
+  try { return JSON.parse(localStorage.getItem(APPEND_LOG_KEY) || '{}'); }
+  catch { return {}; }
+}
+function saveAppendLogs(m) {
+  try { localStorage.setItem(APPEND_LOG_KEY, JSON.stringify(m)); } catch {}
+}
+function addAppendLogEntry(orderId, delta, before, after) {
+  const m = getAppendLogs();
+  if (!m[orderId]) m[orderId] = [];
+  m[orderId].unshift({ delta, before, after, date: today(), ts: Date.now() });
+  saveAppendLogs(m);
+}
+function renderAppendLog(orderId) {
+  const el = document.getElementById('qty-append-log');
+  if (!el) return;
+  const logs = getAppendLogs()[orderId] || [];
+  if (logs.length === 0) {
+    el.innerHTML = '<div class="append-log-empty">// 尚無追加紀錄</div>';
+    return;
+  }
+  el.innerHTML = logs.map(l => `
+    <div class="append-log-row">
+      <span>${l.date}</span>
+      <span class="amt">+${l.delta}</span>
+      <span>${l.before} → ${l.after} 件</span>
+    </div>
+  `).join('');
 }
 function renderPersonChips() {
   const wrap = document.getElementById('person-chips');

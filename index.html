@@ -2769,7 +2769,25 @@ function hydrateFromCache() {
 async function loadAll() {
   try {
     const data = await api('getAll');
+
+    // 記住這次同步「之前」每張訂單的數量，用來偵測有沒有人（可能在別台裝置）追加了數量
+    const prevQtyMap = new Map((state._allOrders || []).map(o => [o.id, Number(o.quantity) || 0]));
+
     state._allOrders = data.orders || [];
+
+    // 有訂單數量變多 → 視同追加：本機若曾隱藏過就自動恢復，並置頂顯示（跟新單一樣）
+    const hidden = getLocalHidden();
+    let hiddenChanged = false;
+    state._allOrders.forEach(o => {
+      const prevQty = prevQtyMap.get(o.id);
+      const curQty = Number(o.quantity) || 0;
+      if (prevQty !== undefined && curQty > prevQty) {
+        if (hidden.has(o.id)) { hidden.delete(o.id); hiddenChanged = true; }
+        markTouched(o.id);
+      }
+    });
+    if (hiddenChanged) saveLocalHidden(hidden);
+
     applyLocalHidden();
     state.makeLogs = data.makeLogs || [];
     state.washLogs = data.washLogs || [];
